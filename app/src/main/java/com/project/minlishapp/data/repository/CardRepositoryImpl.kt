@@ -75,6 +75,16 @@ class CardRepositoryImpl @Inject constructor(
         newDoc.set(dto).await()
     }
 
+    override suspend fun insertCards(cards: List<Card>) {
+        val batch = firestore.batch()
+        cards.forEach { card ->
+            val newDoc = firestore.collection("cards").document()
+            val cardWithId = card.copy(id = newDoc.id)
+            batch.set(newDoc, cardWithId.toDto())
+        }
+        batch.commit().await()
+    }
+
     override suspend fun updateCard(card: Card) {
         val dto = card.toDto()
         firestore.collection("cards").document(card.id)
