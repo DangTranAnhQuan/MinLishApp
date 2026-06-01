@@ -3,8 +3,8 @@ package com.project.minlishapp.presentation.flashcard
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,9 +36,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDragHandleDefaults.colors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -51,13 +51,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.runtime.collectAsState
-import androidx.compose.ui.tooling.preview.Preview
-import com.project.minlishapp.domain.model.Card as FlashcardCard
 import com.project.minlishapp.domain.usecase.srs.ReviewGrade
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -185,9 +183,18 @@ fun FlashcardScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (rotation.value <= 90f) {
-                                        FrontFace(card = currentCard)
+                                        FrontFace(word = currentCard.word)
                                     } else {
-                                        BackFace(card = currentCard)
+                                        BackFace(
+                                            word = currentCard.word,
+                                            pronunciation = currentCard.pronunciation,
+                                            meaning = currentCard.meaning,
+                                            descriptionEn = currentCard.descriptionEn,
+                                            example = currentCard.example,
+                                            collocation = currentCard.collocation,
+                                            relatedWords = currentCard.relatedWords,
+                                            note = currentCard.note
+                                        )
                                     }
                                 }
                             }
@@ -358,7 +365,7 @@ private fun StatChip(
 }
 
 @Composable
-private fun FrontFace(card: FlashcardCard) {
+private fun FrontFace(word: String) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -372,7 +379,7 @@ private fun FrontFace(card: FlashcardCard) {
             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.7.sp)
         )
         Text(
-            text = card.word,
+            text = word,
             color = Color(0xff1f2937),
             textAlign = TextAlign.Center,
             lineHeight = 1.11.em,
@@ -396,31 +403,40 @@ private fun FrontFace(card: FlashcardCard) {
 }
 
 @Composable
-private fun BackFace(card: FlashcardCard) {
+private fun BackFace(
+    word: String,
+    pronunciation: String,
+    meaning: String,
+    descriptionEn: String,
+    example: String,
+    collocation: String,
+    relatedWords: String,
+    note: String
+) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = card.word,
+            text = word,
             color = Color(0xff0066ff),
             textAlign = TextAlign.Center,
             lineHeight = 1.11.em,
             style = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold)
         )
         Text(
-            text = card.pronunciation,
+            text = pronunciation,
             color = Color(0xff6b7280),
             textAlign = TextAlign.Center,
             style = TextStyle(fontSize = 14.sp)
         )
-        DetailRow(label = "Meaning", value = card.meaning)
-        DetailRow(label = "Description EN", value = card.descriptionEn)
-        DetailRow(label = "Example", value = card.example)
-        DetailRow(label = "Collocation", value = card.collocation)
-        DetailRow(label = "Related Words", value = card.relatedWords)
-        DetailRow(label = "Note", value = card.note.ifBlank { "Không có ghi chú" })
+        DetailRow(label = "Meaning", value = meaning)
+        DetailRow(label = "Description EN", value = descriptionEn)
+        DetailRow(label = "Example", value = example)
+        DetailRow(label = "Collocation", value = collocation)
+        DetailRow(label = "Related Words", value = relatedWords)
+        DetailRow(label = "Note", value = note.ifBlank { "Không có ghi chú" })
     }
 }
 
@@ -541,16 +557,15 @@ private fun FlashcardPreviewBack() {
 
 @Composable
 private fun FlashcardPreviewContent(showBackFace: Boolean) {
-    val previewCard = FlashcardCard(
-        word = "accountability",
-        pronunciation = "/əˌkaʊntəˈbɪləti/",
-        meaning = "trách nhiệm giải trình",
-        descriptionEn = "the fact of being responsible for your actions",
-        example = "The manager emphasized accountability in every project.",
-        collocation = "take accountability",
-        relatedWords = "responsibility, obligation",
-        note = "Common in business contexts"
-    )
+    val word = "accountability"
+    val pronunciation = "/əˌkaʊntəˈbɪləti/"
+    val meaning = "trách nhiệm giải trình"
+    val descriptionEn = "the fact of being responsible for your actions"
+    val example = "The manager emphasized accountability in every project."
+    val collocation = "take accountability"
+    val relatedWords = "responsibility, obligation"
+    val note = "Common in business contexts"
+
     Column(modifier = Modifier.padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Header(onBack = {})
         Column(
@@ -578,9 +593,18 @@ private fun FlashcardPreviewContent(showBackFace: Boolean) {
                     contentAlignment = Alignment.Center
                 ) {
                     if (showBackFace) {
-                        BackFace(card = previewCard)
+                        BackFace(
+                            word = word,
+                            pronunciation = pronunciation,
+                            meaning = meaning,
+                            descriptionEn = descriptionEn,
+                            example = example,
+                            collocation = collocation,
+                            relatedWords = relatedWords,
+                            note = note
+                        )
                     } else {
-                        FrontFace(card = previewCard)
+                        FrontFace(word = word)
                     }
                 }
             }
