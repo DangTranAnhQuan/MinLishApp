@@ -13,6 +13,12 @@ interface AuthRepository {
         learningTarget: String,
         currentLevel: String
     ): Result<FirebaseUser>
+    suspend fun signUpBasic(email: String, password: String): Result<FirebaseUser>
+    suspend fun completeProfileSetup(
+        displayName: String,
+        learningTarget: String,
+        currentLevel: String
+    ): Result<Unit>
     suspend fun loginWithCredential(credential: com.google.firebase.auth.AuthCredential): Result<FirebaseUser>
     suspend fun logout()
 }

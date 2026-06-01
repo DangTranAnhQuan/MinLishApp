@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -39,81 +36,96 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.project.minlishapp.presentation.auth.AuthViewModel
+import com.project.minlishapp.presentation.auth.LearningGoalScreen
+import com.project.minlishapp.presentation.auth.LevelSelectionScreen
 import com.project.minlishapp.presentation.auth.LoginScreen
 import com.project.minlishapp.presentation.auth.RegisterScreen
 import com.project.minlishapp.presentation.flashcard.FlashcardScreen
+import com.project.minlishapp.presentation.main.MainScreen
 import com.project.minlishapp.presentation.practice.QuizScreen
-// Toggle this constant to `true` locally when you want the app to start directly
-// on the Practice screen for Module 4 manual testing. Keep `false` for normal runs.
+import com.project.minlishapp.presentation.profile.ProfileScreen
+
+// Toggle cờ này thành true nếu muốn nhảy thẳng vào màn Practice khi làm bài test module 4
 private const val DEBUG_START_ON_PRACTICE = false
 
 @Composable
-fun NavGraph(
+fun RootNavGraph(
     navController: NavHostController,
-    // For local debugging: start directly on Practice when DEBUG build to verify Module 4 UI/flow.
     startDestination: String = if (DEBUG_START_ON_PRACTICE) {
-        // sample deck id used only for debug runs
         Screen.Practice.createRoute("debug_deck")
     } else {
-        Screen.Register.route
+        Screen.AuthLogin.route
     }
 ) {
+    val authViewModel: AuthViewModel = hiltViewModel()
+
     NavHost(
         navController = navController,
         startDestination = startDestination
     ) {
-        composable(Screen.Login.route) {
+        // --- LUỒNG AUTHENTICATION & ONBOARDING ---
+        val loginBlock: @Composable (any: Any) -> Unit = {
             LoginScreen(
-                onNavigateToRegister = {
-                    navController.navigate(Screen.Register.route)
-                },
+                onNavigateToRegister = { navController.navigate(Screen.AuthRegister.route) },
                 onLoginSuccess = {
-                    navController.navigate(Screen.Dashboard.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
+                    navController.navigate(Screen.Main.route) {
+                        popUpTo(Screen.AuthLogin.route) { inclusive = true }
                     }
                 },
-                viewModel = hiltViewModel()
+                onNavigateToProfileSetup = {
+                    navController.navigate(Screen.AuthLearningGoal.route) {
+                        popUpTo(Screen.AuthLogin.route) { inclusive = true }
+                    }
+                },
+                viewModel = authViewModel
             )
         }
+        composable(Screen.AuthLogin.route) { loginBlock(it) }
+        composable(Screen.Login.route) { loginBlock(it) } // Hỗ trợ cả alias cũ để tránh lỗi compile
 
-        composable(Screen.Register.route) {
+        val registerBlock: @Composable (any: Any) -> Unit = {
             RegisterScreen(
                 onNavigateToLogin = {
-                    navController.navigate(Screen.Login.route) {
-                        popUpTo(Screen.Register.route) { inclusive = true }
+                    navController.navigate(Screen.AuthLogin.route) {
+                        popUpTo(Screen.AuthRegister.route) { inclusive = true }
                     }
                 },
                 onRegisterSuccess = {
-                    navController.navigate(Screen.Dashboard.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
+                    navController.navigate(Screen.AuthLearningGoal.route) {
+                        popUpTo(Screen.AuthRegister.route) { inclusive = true }
                     }
                 },
-                viewModel = hiltViewModel()
+                viewModel = authViewModel
+            )
+        }
+        composable(Screen.AuthRegister.route) { registerBlock(it) }
+        composable(Screen.Register.route) { registerBlock(it) } // Hỗ trợ cả alias cũ để tránh lỗi compile
+
+        composable(Screen.AuthLearningGoal.route) {
+            LearningGoalScreen(
+                onNavigateNext = { navController.navigate(Screen.AuthLevelSelection.route) },
+                viewModel = authViewModel
             )
         }
 
-        composable(Screen.Dashboard.route) {
-            DashboardScreen(
-                onSelectDeck = { deckId ->
-                    navController.navigate(Screen.FlashcardLearning.createRoute(deckId))
-                },
-                onLogout = {
-                    navController.navigate(Screen.Register.route) {
-                        popUpTo(Graph.ROOT) { inclusive = true }
+        composable(Screen.AuthLevelSelection.route) {
+            LevelSelectionScreen(
+                onNavigateNext = {
+                    navController.navigate(Screen.Main.route) {
+                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
                     }
-                }
-            )
-        }
-
-        composable(Screen.DeckList.route) {
-            DeckListScreen(
-                onSelectDeck = { deckId ->
-                    navController.navigate(Screen.CardList.createRoute(deckId))
                 },
-                onBack = { navController.popBackStack() }
+                viewModel = authViewModel
             )
         }
 
+        // --- GIAO DIỆN CHÍNH (CHỨA BOTTOM NAVIGATION) ---
+        composable(Screen.Main.route) {
+            MainScreen(rootNavController = navController)
+        }
+
+        // --- CÁC MÀN HÌNH TOÀN MÀN HÌNH (ẨN BOTTOM BAR) ---
         composable(
             route = Screen.CardList.route,
             arguments = listOf(navArgument("deckId") { type = NavType.StringType })
@@ -121,12 +133,8 @@ fun NavGraph(
             val deckId = backStackEntry.arguments?.getString("deckId") ?: ""
             CardListScreen(
                 deckId = deckId,
-                onPractice = { selectedDeckId ->
-                    navController.navigate(Screen.Practice.createRoute(selectedDeckId))
-                },
-                onLearn = { selectedDeckId ->
-                    navController.navigate(Screen.FlashcardLearning.createRoute(selectedDeckId))
-                },
+                onPractice = { selectedDeckId -> navController.navigate(Screen.Practice.createRoute(selectedDeckId)) },
+                onLearn = { selectedDeckId -> navController.navigate(Screen.FlashcardLearning.createRoute(selectedDeckId)) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -153,7 +161,64 @@ fun NavGraph(
     }
 }
 
-// Screen Implementations
+@Composable
+fun MainNavGraph(
+    navController: NavHostController,
+    rootNavController: NavHostController,
+    modifier: Modifier = Modifier
+) {
+    NavHost(
+        navController = navController,
+        startDestination = Screen.MainDashboard.route,
+        modifier = modifier
+    ) {
+        // Tab Dashboard / Home
+        val dashboardBlock: @Composable (any: Any) -> Unit = {
+            DashboardScreen(
+                onSelectDeck = { deckId ->
+                    rootNavController.navigate(Screen.FlashcardLearning.createRoute(deckId))
+                },
+                onLogout = {
+                    rootNavController.navigate(Screen.AuthLogin.route) {
+                        popUpTo(Screen.Main.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable(Screen.MainDashboard.route) { dashboardBlock(it) }
+        composable(Screen.Dashboard.route) { dashboardBlock(it) }
+
+        // Tab Decks (Danh sách bộ từ vựng)
+        val deckListBlock: @Composable (any: Any) -> Unit = {
+            DeckListScreen(
+                onSelectDeck = { deckId ->
+                    rootNavController.navigate(Screen.CardList.createRoute(deckId))
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.MainDecks.route) { deckListBlock(it) }
+        composable(Screen.DeckList.route) { deckListBlock(it) }
+
+        // Tab Practice công cụ nhanh (Tạm thời trỏ tới danh sách Deck để chọn bài luyện tập)
+        composable(Screen.MainPractice.route) { deckListBlock(it) }
+
+        // Tab Profile cá nhân
+        composable(Screen.MainProfile.route) {
+            ProfileScreen(
+                onLogoutClick = {
+                    rootNavController.navigate(Screen.AuthLogin.route) {
+                        popUpTo(Screen.Main.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+    }
+}
+
+// ==========================================
+// SCREEN IMPLEMENTATIONS (Giao diện UI từ nhánh main)
+// ==========================================
 
 @Composable
 private fun DashboardScreen(
@@ -161,9 +226,7 @@ private fun DashboardScreen(
     onLogout: () -> Unit
 ) {
     Scaffold(
-        topBar = {
-            DashboardHeader(onLogout = onLogout)
-        }
+        topBar = { DashboardHeader(onLogout = onLogout) }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -187,7 +250,6 @@ private fun DashboardScreen(
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
             )
 
-            // Sample Decks
             val sampleDecks = listOf(
                 "Bộ từ vựng IELTS" to "ielts_deck",
                 "Bộ từ vựng TOEIC" to "toeic_deck",
@@ -196,10 +258,7 @@ private fun DashboardScreen(
             )
 
             sampleDecks.forEach { (deckName, deckId) ->
-                DeckCard(
-                    name = deckName,
-                    onClick = { onSelectDeck(deckId) }
-                )
+                DeckCard(name = deckName, onClick = { onSelectDeck(deckId) })
             }
         }
     }
@@ -219,7 +278,6 @@ private fun DashboardHeader(onLogout: () -> Unit) {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.align(Alignment.CenterStart)
         )
-
         TextButton(
             onClick = onLogout,
             modifier = Modifier.align(Alignment.CenterEnd)
@@ -235,9 +293,7 @@ private fun DeckListScreen(
     onBack: () -> Unit
 ) {
     Scaffold(
-        topBar = {
-            DeckListHeader(onBack = onBack)
-        }
+        topBar = { DeckListHeader(onBack = onBack) }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -257,10 +313,7 @@ private fun DeckListScreen(
             )
 
             decks.forEach { (deckName, deckId) ->
-                DeckCard(
-                    name = deckName,
-                    onClick = { onSelectDeck(deckId) }
-                )
+                DeckCard(name = deckName, onClick = { onSelectDeck(deckId) })
             }
         }
     }
@@ -283,7 +336,6 @@ private fun DeckListHeader(onBack: () -> Unit) {
                 contentDescription = "Back"
             )
         }
-
         Text(
             text = "Các bộ từ vựng",
             fontSize = 18.sp,
@@ -301,9 +353,7 @@ private fun CardListScreen(
     onBack: () -> Unit
 ) {
     Scaffold(
-        topBar = {
-            CardListHeader(onBack = onBack)
-        }
+        topBar = { CardListHeader(onBack = onBack) }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -331,21 +381,16 @@ private fun CardListScreen(
 
             Spacer(modifier = Modifier.padding(8.dp))
 
-            // Action Buttons
             Button(
                 onClick = { onLearn(deckId) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
             ) {
                 Text("Học từ vựng")
             }
 
             Button(
                 onClick = { onPractice(deckId) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
             ) {
                 Text("Luyện tập")
             }
@@ -370,7 +415,6 @@ private fun CardListHeader(onBack: () -> Unit) {
                 contentDescription = "Back"
             )
         }
-
         Text(
             text = "Chi tiết bộ từ",
             fontSize = 18.sp,
@@ -418,7 +462,7 @@ object Graph {
 
 private fun NavHostController.navigateBackOrToRegister() {
     if (!popBackStack()) {
-        navigate(Screen.Register.route) {
+        navigate(Screen.AuthRegister.route) {
             popUpTo(graph.startDestinationId) { inclusive = true }
             launchSingleTop = true
         }
