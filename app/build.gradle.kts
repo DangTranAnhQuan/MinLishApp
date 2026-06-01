@@ -40,6 +40,12 @@ android {
     buildFeatures {
         compose = true
     }
+
+    packaging {
+        resources {
+            pickFirsts += "META-INF/androidx.localbroadcastmanager_localbroadcastmanager.version"
+        }
+    }
 }
 
 dependencies {
@@ -58,6 +64,7 @@ dependencies {
 
     // Firebase
     implementation(platform(libs.firebase.bom))
+    implementation(libs.androidx.vectordrawable.animated)
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)

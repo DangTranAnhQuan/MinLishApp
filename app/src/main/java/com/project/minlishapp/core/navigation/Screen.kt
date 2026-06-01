@@ -37,4 +37,4 @@ sealed class Screen(val route: String, val title: String? = null) {
         const val ROOT_GRAPH = "root"
     }
 }
-}
+

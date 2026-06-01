@@ -17,7 +17,3 @@ val VibrantBlueLight = Color(0xFF60A5FAL)
 val DarkText = Color(0xFF1F2937L)
 val GrayText = Color(0xFF6B7280L)
 val VeryLightGray = Color(0xFFE5E7EBL)
-
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
