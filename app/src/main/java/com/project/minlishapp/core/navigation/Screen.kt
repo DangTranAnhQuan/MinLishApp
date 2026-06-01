@@ -14,4 +14,8 @@ sealed class Screen(val route: String) {
     object Practice : Screen("practice/{deckId}") {
         fun createRoute(deckId: String) = "practice/$deckId"
     }
+
+    companion object {
+        const val ROOT_GRAPH = "root"
+    }
 }
