@@ -11,4 +11,7 @@ sealed class Screen(val route: String) {
     object FlashcardLearning : Screen("flashcard_learning/{deckId}") {
         fun createRoute(deckId: String) = "flashcard_learning/$deckId"
     }
+    object Practice : Screen("practice/{deckId}") {
+        fun createRoute(deckId: String) = "practice/$deckId"
+    }
 }
