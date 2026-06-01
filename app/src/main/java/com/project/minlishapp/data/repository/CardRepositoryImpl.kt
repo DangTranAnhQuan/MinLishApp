@@ -36,6 +36,21 @@ class CardRepositoryImpl @Inject constructor(
         awaitClose { listener.remove() }
     }
 
+    override fun getAllCards(): Flow<List<Card>> = callbackFlow {
+        val listener = firestore.collection("cards")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val cards = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(CardDto::class.java)?.copy(id = doc.id)?.toDomain()
+                } ?: emptyList()
+                trySend(cards)
+            }
+        awaitClose { listener.remove() }
+    }
+
     override fun getDueCards(userId: String, currentTimeMs: Long): Flow<List<Card>> = callbackFlow {
         val listener = firestore.collection("cards")
             .whereEqualTo("userId", userId)

@@ -15,17 +15,18 @@ import androidx.navigation.navArgument
 import com.project.minlishapp.presentation.auth.LoginScreen
 import com.project.minlishapp.presentation.auth.RegisterScreen
 import com.project.minlishapp.presentation.flashcard.FlashcardScreen
+import com.project.minlishapp.presentation.practice.QuizScreen
 // Toggle this constant to `true` locally when you want the app to start directly
-// on the Flashcard screen for Module 3 manual testing. Keep `false` for normal runs.
-private const val DEBUG_START_ON_FLASHCARD = true
+// on the Practice screen for Module 4 manual testing. Keep `false` for normal runs.
+private const val DEBUG_START_ON_PRACTICE = true
 
 @Composable
 fun NavGraph(
     navController: NavHostController,
-    // For local debugging: start directly on FlashcardLearning when DEBUG build to verify Module 3 UI/flow.
-    startDestination: String = if (DEBUG_START_ON_FLASHCARD) {
+    // For local debugging: start directly on Practice when DEBUG build to verify Module 4 UI/flow.
+    startDestination: String = if (DEBUG_START_ON_PRACTICE) {
         // sample deck id used only for debug runs
-        Screen.FlashcardLearning.createRoute("debug_deck")
+        Screen.Practice.createRoute("debug_deck")
     } else {
         Screen.Register.route
     }
@@ -90,9 +91,28 @@ fun NavGraph(
             arguments = listOf(navArgument("deckId") { type = NavType.StringType })
         ) {
             FlashcardScreen(
-                onBack = { navController.popBackStack() },
+                onBack = { navController.navigateBackOrToRegister() },
                 viewModel = hiltViewModel()
             )
+        }
+
+        composable(
+            route = Screen.Practice.route,
+            arguments = listOf(navArgument("deckId") { type = NavType.StringType })
+        ) {
+            QuizScreen(
+                onBack = { navController.navigateBackOrToRegister() },
+                viewModel = hiltViewModel()
+            )
+        }
+    }
+}
+
+private fun NavHostController.navigateBackOrToRegister() {
+    if (!popBackStack()) {
+        navigate(Screen.Register.route) {
+            popUpTo(graph.startDestinationId) { inclusive = true }
+            launchSingleTop = true
         }
     }
 }
