@@ -25,8 +25,9 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.project.minlishapp.R
-import com.project.minlishapp.core.navigation.MainNavGraph
+// removed import
 import com.project.minlishapp.core.navigation.Screen
+import androidx.navigation.compose.composable
 
 @Composable
 fun MainScreen(
@@ -89,7 +90,7 @@ fun MainScreen(
         }
     )
 { innerPadding ->
-        MainNavGraph(
+        com.project.minlishapp.core.navigation.MainNavGraph(
             navController = bottomNavController,
             rootNavController = rootNavController,
             modifier = Modifier.padding(innerPadding)

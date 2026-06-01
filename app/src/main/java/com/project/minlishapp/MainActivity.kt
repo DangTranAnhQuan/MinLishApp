@@ -37,7 +37,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import com.project.minlishapp.core.navigation.RootNavGraph
+// removed import
 import com.project.minlishapp.core.worker.DailyReminderWorker
 import com.project.minlishapp.ui.theme.MinLishAppTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -95,10 +95,10 @@ class MainActivity : ComponentActivity() {
                     val startRoute = if (uiState.isAuthenticated) {
                         Screen.Main.route
                     } else {
-                        Screen.AuthLogin.route
+                        Screen.Login.route
                     }
 
-                    RootNavGraph(
+                    com.project.minlishapp.core.navigation.NavGraph(
                         navController = navController,
                         startDestination = startRoute
                     )

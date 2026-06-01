@@ -47,6 +47,7 @@ private val IncorrectContainerColor = Color(0xfffee2e2)
 @Composable
 fun QuizScreen(
     onBack: () -> Unit,
+    onNavigateToDashboard: () -> Unit = {},
     viewModel: PracticeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -54,6 +55,7 @@ fun QuizScreen(
     PracticeContent(
         uiState = uiState,
         onBack = onBack,
+        onNavigateToDashboard = onNavigateToDashboard,
         onQuizTypeSelected = viewModel::selectQuizType,
         onMultipleChoiceAnswerSelected = viewModel::selectMultipleChoiceAnswer,
         onFillInBlankAnswerChanged = viewModel::onFillInBlankAnswerChange,
@@ -66,6 +68,7 @@ fun QuizScreen(
 private fun PracticeContent(
     uiState: PracticeUiState,
     onBack: () -> Unit,
+    onNavigateToDashboard: () -> Unit,
     onQuizTypeSelected: (QuizType) -> Unit,
     onMultipleChoiceAnswerSelected: (String) -> Unit,
     onFillInBlankAnswerChanged: (String) -> Unit,
@@ -185,6 +188,14 @@ private fun PracticeContent(
                                         "Làm lại câu này"
                                     }
                                 )
+                            }
+                            
+                            OutlinedButton(
+                                onClick = onNavigateToDashboard,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Text("Xem Tổng quan (Dashboard)")
                             }
                         }
                     }
@@ -460,6 +471,7 @@ private fun MultipleChoicePreview() {
                 )
             ),
             onBack = {},
+            onNavigateToDashboard = {},
             onQuizTypeSelected = {},
             onMultipleChoiceAnswerSelected = {},
             onFillInBlankAnswerChanged = {},
@@ -486,6 +498,7 @@ private fun FillInBlankPreview() {
                 )
             ),
             onBack = {},
+            onNavigateToDashboard = {},
             onQuizTypeSelected = {},
             onMultipleChoiceAnswerSelected = {},
             onFillInBlankAnswerChanged = {},

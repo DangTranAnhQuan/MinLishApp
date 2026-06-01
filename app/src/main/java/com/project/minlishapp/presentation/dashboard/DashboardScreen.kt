@@ -40,28 +40,12 @@ fun DashboardContent(
         DashboardCards(uiState = uiState)
         
         Spacer(modifier = Modifier.height(32.dp))
-        // Placeholder for Daily Activity Chart
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(140.dp)
-                .background(Color(0xFFF3F4F6), RoundedCornerShape(16.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("Daily Activity Chart Placeholder", color = Color.Gray)
-        }
+        // Daily Activity Chart
+        DailyActivityChart(data = uiState.dailyActivityData)
         
         Spacer(modifier = Modifier.height(32.dp))
-        // Placeholder for Retention Rate Chart
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(140.dp)
-                .background(Color(0xFFF3F4F6), RoundedCornerShape(16.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("Retention Rate Chart Placeholder", color = Color.Gray)
-        }
+        // Retention Rate Chart
+        RetentionLineChart(data = uiState.retentionData)
     }
 }
 

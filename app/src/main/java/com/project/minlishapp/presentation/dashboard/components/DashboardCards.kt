@@ -68,7 +68,7 @@ fun StatCard(
 ) {
     Card(
         modifier = modifier
-            .aspectRatio(0.9f)
+            .aspectRatio(0.85f)
             .shadow(
                 elevation = 8.dp,
                 shape = RoundedCornerShape(20.dp),
