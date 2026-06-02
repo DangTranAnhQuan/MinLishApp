@@ -1,7 +1,11 @@
 package com.project.minlishapp.presentation.vocabulary
 
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.minlishapp.domain.model.Card
@@ -14,12 +18,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.io.OutputStreamWriter
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
@@ -40,11 +46,21 @@ class VocabularyViewModel @Inject constructor(
 
     private fun loadDecks() {
         viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
             authRepository.currentUser.collect { user ->
                 user?.uid?.let { userId ->
-                    deckRepository.getDecks(userId).collect { decks ->
-                        _uiState.update { it.copy(decks = decks) }
-                    }
+                    deckRepository.getDecks(userId)
+                        .catch { e ->
+                            _uiState.update { it.copy(
+                                isLoading = false,
+                                errorMessage = "Error loading decks: ${e.message}. If this is a Firestore error, check if you need to create an index."
+                            ) }
+                        }
+                        .collect { decks ->
+                            _uiState.update { it.copy(decks = decks, isLoading = false, errorMessage = null) }
+                        }
+                } ?: run {
+                    _uiState.update { it.copy(isLoading = false) }
                 }
             }
         }
@@ -74,7 +90,7 @@ class VocabularyViewModel @Inject constructor(
 
     fun updateDeck(deck: Deck) {
         viewModelScope.launch {
-            deckRepository.insertDeck(deck)
+            deckRepository.updateDeck(deck)
         }
     }
 
@@ -109,6 +125,13 @@ class VocabularyViewModel @Inject constructor(
                     createdAt = Date()
                 )
                 cardRepository.insertCard(card)
+                
+                // Update deck word count
+                deckRepository.getDeck(deckId).first()?.let { deck ->
+                    val updatedDeck = deck.copy(wordCount = deck.wordCount + 1)
+                    deckRepository.updateDeck(updatedDeck)
+                }
+
                 // Reset form after save
                 _uiState.update { it.copy(cardForm = CardFormState()) }
             }
@@ -132,7 +155,10 @@ class VocabularyViewModel @Inject constructor(
                             // Assuming CSV format: word,phonetic,meaning,definition,example,imageUrl,audioUrl,tags
                             var line: String? = reader.readLine()
                             while (line != null) {
-                                val parts = line.split(Regex("[,;]"))
+                                // Regex to handle CSV with quotes: splits by comma only if it's not inside quotes
+                                val parts = line.split(Regex(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"))
+                                    .map { it.trim().removeSurrounding("\"") }
+
                                 if (parts.size >= 3) {
                                     val card = Card(
                                         id = UUID.randomUUID().toString(),
@@ -171,9 +197,78 @@ class VocabularyViewModel @Inject constructor(
                 
                 _uiState.update { it.copy(isImporting = false, importStatus = "Success! $total words imported.") }
                 
+                // Update deck word count
+                deckRepository.getDeck(deckId).first()?.let { deck ->
+                    val updatedDeck = deck.copy(wordCount = deck.wordCount + total)
+                    deckRepository.updateDeck(updatedDeck)
+                }
+                
             } catch (e: Exception) {
                 _uiState.update { it.copy(isImporting = false, importStatus = "Error: ${e.message}") }
             }
+        }
+    }
+
+    fun exportDeck(context: Context, deckId: String, deckTitle: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                val cards = cardRepository.getCardsInDeck(deckId).first()
+                val csvContent = buildString {
+                    append("Word,Phonetic,Meaning,Definition,Example,ImageUrl,AudioUrl,Tags\n")
+                    cards.forEach { card ->
+                        append("${escapeCsv(card.word)},")
+                        append("${escapeCsv(card.pronunciation)},")
+                        append("${escapeCsv(card.meaning)},")
+                        append("${escapeCsv(card.definition)},")
+                        append("${escapeCsv(card.example)},")
+                        append("${escapeCsv(card.imageUrl)},")
+                        append("${escapeCsv(card.audioUrl)},")
+                        append("${escapeCsv(card.tags.joinToString("|"))}\n")
+                    }
+                }
+
+                saveFileToDownloads(context, "${deckTitle.replace(" ", "_")}_export.csv", csvContent)
+                _uiState.update { it.copy(isLoading = false, errorMessage = "Exported to Downloads folder") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = "Export failed: ${e.message}") }
+            }
+        }
+    }
+
+    private fun escapeCsv(value: String): String {
+        return if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            "\"${value.replace("\"", "\"\"")}\""
+        } else {
+            value
+        }
+    }
+
+    private suspend fun saveFileToDownloads(context: Context, fileName: String, content: String) {
+        withContext(Dispatchers.IO) {
+            val resolver = context.contentResolver
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                }
+            }
+
+            val collectionUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            } else {
+                Uri.parse("content://downloads/public_downloads")
+            }
+
+            val uri = resolver.insert(collectionUri, contentValues)
+            uri?.let {
+                resolver.openOutputStream(it)?.use { outputStream ->
+                    OutputStreamWriter(outputStream).use { writer ->
+                        writer.write(content)
+                    }
+                }
+            } ?: throw Exception("Could not create file in Downloads")
         }
     }
 }
@@ -183,6 +278,7 @@ data class VocabularyUiState(
     val cards: List<Card> = emptyList(),
     val searchQuery: String = "",
     val isLoading: Boolean = false,
+    val errorMessage: String? = null,
     val isImporting: Boolean = false,
     val importProgress: Float = 0f,
     val importStatus: String = "",

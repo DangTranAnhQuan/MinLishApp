@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.minlishapp.domain.model.Card
+import com.project.minlishapp.domain.repository.AuthRepository
 import com.project.minlishapp.domain.repository.CardRepository
 import com.project.minlishapp.domain.usecase.quiz.FillInBlankQuestion
 import com.project.minlishapp.domain.usecase.quiz.GenerateQuizUseCase
@@ -14,6 +15,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -22,6 +25,7 @@ import javax.inject.Inject
 class PracticeViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val cardRepository: CardRepository,
+    private val authRepository: AuthRepository,
     private val generateQuizUseCase: GenerateQuizUseCase
 ) : ViewModel() {
 
@@ -31,36 +35,45 @@ class PracticeViewModel @Inject constructor(
     val uiState: StateFlow<PracticeUiState> = _uiState.asStateFlow()
 
     init {
-        if (deckId.isBlank()) {
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    errorMessage = "Thiếu deckId để tải bài luyện tập."
-                )
-            }
-        } else {
-            observeDeckCards()
-        }
+        observeDeckCards()
     }
 
     private fun observeDeckCards() {
         viewModelScope.launch {
             runCatching {
-                combine(
-                    cardRepository.getCardsInDeck(deckId),
-                    cardRepository.getAllCards()
-                ) { deckCards, systemCards ->
-                    deckCards to systemCards
-                }.collectLatest { (deckCards, systemCards) ->
+                val userIdFlow = authRepository.currentUser.flatMapLatest { user ->
+                    val userId = user?.uid ?: ""
+                    
+                    val deckCardsFlow = if (deckId.isNotBlank()) {
+                        cardRepository.getCardsInDeck(deckId)
+                    } else if (userId.isNotBlank()) {
+                        cardRepository.getCardsByUser(userId)
+                    } else {
+                        kotlinx.coroutines.flow.flowOf(emptyList())
+                    }
+
+                    combine(
+                        deckCardsFlow,
+                        cardRepository.getAllCards()
+                    ) { deckCards, systemCards ->
+                        deckCards to systemCards
+                    }
+                }
+
+                userIdFlow.collectLatest { (deckCards, systemCards) ->
                     _uiState.update {
                         it.copy(
                             cards = deckCards,
                             systemCards = systemCards,
                             isLoading = false,
-                            errorMessage = null
+                            errorMessage = if (deckId.isBlank() && deckCards.isEmpty()) {
+                                "Hãy thêm từ vựng hoặc chọn bộ từ để bắt đầu luyện tập."
+                            } else null
                         )
                     }
-                    showNextQuestion()
+                    if (deckCards.isNotEmpty()) {
+                        showNextQuestion()
+                    }
                 }
             }.onFailure { throwable ->
                 _uiState.update {
