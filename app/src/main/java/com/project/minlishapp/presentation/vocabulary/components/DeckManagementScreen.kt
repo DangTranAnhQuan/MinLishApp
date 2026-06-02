@@ -1,5 +1,8 @@
 package com.project.minlishapp.presentation.vocabulary.components
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -7,9 +10,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
@@ -28,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -42,14 +48,21 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +81,36 @@ fun DeckManagementScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    var selectedDeckIdForImport by remember { mutableStateOf<String?>(null) }
+
+    val csvPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            selectedDeckIdForImport?.let { deckId ->
+                viewModel.importCsv(context, it, deckId)
+            }
+        }
+    }
+
+    if (uiState.isImporting) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Importing Cards") },
+            text = {
+                Column {
+                    LinearProgressIndicator(
+                        progress = { uiState.importProgress },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(uiState.importStatus)
+                }
+            },
+            confirmButton = { }
+        )
+    }
 
     Box(
         modifier = modifier
@@ -95,17 +138,6 @@ fun DeckManagementScreen(
                         letterSpacing = (-0.55).sp
                     )
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onImportExportClick) {
-                        Text(text = "", style = TextStyle(fontSize = 20.sp), color = Color(0xff49454f))
-                    }
-                    IconButton(onClick = { /* Export Logic if separate */ onImportExportClick() }) {
-                        Text(text = "", style = TextStyle(fontSize = 20.sp), color = Color(0xff49454f))
-                    }
-                }
             }
 
             Column(
@@ -114,6 +146,29 @@ fun DeckManagementScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
             ) {
+                // Error/Status Message
+                uiState.errorMessage?.let { error ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = error,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            TextButton(onClick = { viewModel.onSearchQueryChange(uiState.searchQuery) /* hack to clear msg */ }) {
+                                Text("OK")
+                            }
+                        }
+                    }
+                }
+
                 // Search Bar
                 TextField(
                     value = uiState.searchQuery,
@@ -134,21 +189,34 @@ fun DeckManagementScreen(
                 )
 
                 // Decks Grid
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    items(uiState.decks.filter { it.title.contains(uiState.searchQuery, ignoreCase = true) }) { deck ->
-                        DeckItem(
-                            deck = deck,
-                            onClick = { onDeckClick(deck.id) },
-                            onDelete = { viewModel.deleteDeck(deck.id) }
-                        )
+                if (uiState.isLoading) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
                     }
-                    item {
-                        NewDeckCard(onClick = { viewModel.addDeck("New Deck", "", emptyList()) })
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        items(uiState.decks.filter { it.title.contains(uiState.searchQuery, ignoreCase = true) }) { deck ->
+                            DeckItem(
+                                deck = deck,
+                                onClick = { onDeckClick(deck.id) },
+                                onDelete = { viewModel.deleteDeck(deck.id) },
+                                onImport = {
+                                    selectedDeckIdForImport = deck.id
+                                    csvPickerLauncher.launch("text/*")
+                                },
+                                onExport = {
+                                    viewModel.exportDeck(context, deck.id, deck.title)
+                                }
+                            )
+                        }
+                        item {
+                            NewDeckCard(onClick = { viewModel.addDeck("New Deck", "", emptyList()) })
+                        }
                     }
                 }
             }
@@ -178,7 +246,13 @@ fun DeckManagementScreen(
 }
 
 @Composable
-fun DeckItem(deck: Deck, onClick: () -> Unit, onDelete: () -> Unit) {
+fun DeckItem(
+    deck: Deck, 
+    onClick: () -> Unit, 
+    onDelete: () -> Unit,
+    onImport: () -> Unit,
+    onExport: () -> Unit
+) {
     var showMenu by remember { mutableStateOf(false) }
 
     Surface(
@@ -199,6 +273,23 @@ fun DeckItem(deck: Deck, onClick: () -> Unit, onDelete: () -> Unit) {
                         style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold),
                         maxLines = 1
                     )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.List,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = Color(0xff0061ff).copy(alpha = 0.7f)
+                        )
+                        Spacer(modifier = Modifier.size(4.dp))
+                        Text(
+                            text = "${deck.wordCount} cards",
+                            color = Color(0xff0061ff).copy(alpha = 0.7f),
+                            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        )
+                    }
                     Text(
                         text = deck.description,
                         color = Color(0xff49454f),
@@ -223,8 +314,18 @@ fun DeckItem(deck: Deck, onClick: () -> Unit, onDelete: () -> Unit) {
                     Icon(Icons.Default.MoreVert, contentDescription = null, tint = Color(0xff49454f))
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                    DropdownMenuItem(text = { Text("Delete") }, onClick = { onDelete(); showMenu = false })
-                    DropdownMenuItem(text = { Text("Edit") }, onClick = { /* Edit Logic */ showMenu = false })
+                    DropdownMenuItem(
+                        text = { Text("Import CSV") }, 
+                        onClick = { onImport(); showMenu = false }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Export CSV") }, 
+                        onClick = { onExport(); showMenu = false }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete") }, 
+                        onClick = { onDelete(); showMenu = false }
+                    )
                 }
             }
         }

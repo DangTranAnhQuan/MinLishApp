@@ -7,5 +7,6 @@ interface DeckRepository {
     fun getDecks(userId: String): Flow<List<Deck>>
     fun getDeck(deckId: String): Flow<Deck?>
     suspend fun insertDeck(deck: Deck)
+    suspend fun updateDeck(deck: Deck)
     suspend fun deleteDeck(deckId: String)
 }
