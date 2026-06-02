@@ -1,33 +1,49 @@
 package com.project.minlishapp.presentation.auth
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.firebase.auth.GoogleAuthProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import com.project.minlishapp.R
+import com.project.minlishapp.presentation.components.AppTextField
+import com.project.minlishapp.presentation.components.PrimaryButton
+import com.project.minlishapp.presentation.components.SocialLoginButton
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(
     onNavigateToLogin: () -> Unit,
@@ -36,182 +52,278 @@ fun RegisterScreen(
     viewModel: AuthViewModel
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(uiState.isAuthenticated) {
-        if (uiState.isAuthenticated) {
+    LaunchedEffect(uiState.isRegisterSuccess) {
+        if (uiState.isRegisterSuccess) {
             onRegisterSuccess()
+            viewModel.resetRegisterSuccess()
         }
     }
-
-    Box(
+//Start
+//    RegisterContent(
+//        uiState = uiState,
+//        onDisplayNameChange = viewModel::onDisplayNameChange,
+//        onEmailChange = viewModel::onEmailChange,
+//        onPasswordChange = viewModel::onPasswordChange,
+//        onSignUpClick = viewModel::signUp,
+//        onNavigateToLogin = onNavigateToLogin,
+//        onGoogleLoginClick = viewModel::loginWithCredential,
+//        onShowError = viewModel::showError,
+//        modifier = modifier
+//    )
+//}
+//
+//@Composable
+//fun RegisterContent(
+//    uiState: AuthUiState,
+//    onDisplayNameChange: (String) -> Unit,
+//    onEmailChange: (String) -> Unit,
+//    onPasswordChange: (String) -> Unit,
+//    onSignUpClick: () -> Unit,
+//    onNavigateToLogin: () -> Unit,
+//    onGoogleLoginClick: (com.google.firebase.auth.AuthCredential) -> Unit,
+//    onShowError: (String) -> Unit,
+//    modifier: Modifier = Modifier
+//) {
+//    val context = LocalContext.current
+//    val coroutineScope = rememberCoroutineScope()
+//End
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.Center
+            .background(Color.White)
+            .systemBarsPadding()
+            .imePadding()
+            .padding(horizontal = 16.dp, vertical = 0.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Spacer(modifier = Modifier.weight(2f))
+        RegisterHeader()
+        Spacer(modifier = Modifier.weight(1f))
+        RegisterForm(
+            uiState = uiState,
+            onDisplayNameChange = { viewModel.onDisplayNameChange(it) },
+            onEmailChange = { viewModel.onEmailChange(it) },
+            onPasswordChange = { viewModel.onPasswordChange(it) }
+//            onDisplayNameChange = onDisplayNameChange,
+//            onEmailChange = onEmailChange,
+//            onPasswordChange = onPasswordChange
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        RegisterActions(
+            uiState = uiState,
+            onSignUpClick = { viewModel.signUp() }
+//            onSignUpClick = onSignUpClick
+        )
+        Spacer(modifier = Modifier.weight(0.8f))
+        RegisterSocialSection(
+            context = context,
+            coroutineScope = coroutineScope,
+            onGoogleLoginClick = { credential -> viewModel.loginWithCredential(credential) },
+            onShowError = { error -> viewModel.showError(error) }
+//            onGoogleLoginClick = onGoogleLoginClick,
+//            onShowError = onShowError
+        )
+        Spacer(modifier = Modifier.weight(0.8f))
+        RegisterFooter(
+            onNavigateToLogin = onNavigateToLogin
+        )
+        Spacer(modifier = Modifier.weight(1.5f))
+    }
+}
+
+@Composable
+private fun RegisterHeader() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .width(64.dp)
+                .height(72.dp)
+                .padding(bottom = 8.dp)
         ) {
-            // Screen Title
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(shape = RoundedCornerShape(24.dp))
+                    .background(color = Color(0xff1a73e8))
+                    .shadow(elevation = 14.dp, shape = RoundedCornerShape(24.dp))
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_minlish_logo),
+                    contentDescription = "Logo",
+                    colorFilter = ColorFilter.tint(Color.White),
+                    modifier = Modifier.size(30.dp)
+                )
+            }
+        }
+        Column(modifier = Modifier.padding(top = 16.dp)) {
             Text(
-                text = "Create Account",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center
+                text = "MinLish",
+                color = Color(0xff1e293b),
+                textAlign = TextAlign.Center,
+                lineHeight = 1.2.em,
+                style = TextStyle(
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.75).sp
+                ),
+                modifier = Modifier.wrapContentHeight(align = Alignment.CenterVertically)
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Join MinLish to start learning",
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(40.dp))
-
-            // Display Name Input
-            OutlinedTextField(
-                value = uiState.displayName,
-                onValueChange = { viewModel.onDisplayNameChange(it) },
-                label = { Text("Full Name") },
-                leadingIcon = { Icon(Icons.Default.Person, contentDescription = "Full Name") },
-                singleLine = true,
+        }
+        
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp)
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(7.dp, Alignment.Top),
                 modifier = Modifier.fillMaxWidth()
-            )
+            ) {
+                Text(
+                    text = "Create Account",
+                    color = Color(0xff1e293b),
+                    textAlign = TextAlign.Center,
+                    lineHeight = 1.33.em,
+                    style = TextStyle(
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "Start your journey with us today.",
+                    color = Color(0xff64748b),
+                    textAlign = TextAlign.Center,
+                    lineHeight = 1.5.em,
+                    style = TextStyle(fontSize = 15.sp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
 
-            Spacer(modifier = Modifier.height(16.dp))
+@Composable
+private fun RegisterForm(
+    uiState: AuthUiState,
+    onDisplayNameChange: (String) -> Unit,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.Top),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // Full Name
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Top),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Full Name",
+                    color = Color(0xff1e293b),
+                    lineHeight = 1.43.em,
+                    style = TextStyle(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 4.dp)
+                )
+                AppTextField(
+                    value = uiState.displayName,
+                    onValueChange = onDisplayNameChange,
+                    placeholder = "Enter your full name",
+                    leadingIconRes = R.drawable.ic_fullname,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
+                )
+            }
 
-            // Learning Target Dropdown
-            var learningTargetExpanded by remember { mutableStateOf(false) }
-            val learningTargets = listOf("IELTS", "TOEIC", "Giao tiếp", "Công việc")
+            // Email
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Top),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Email",
+                    color = Color(0xff1e293b),
+                    lineHeight = 1.43.em,
+                    style = TextStyle(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 4.dp)
+                )
+                AppTextField(
+                    value = uiState.email,
+                    onValueChange = onEmailChange,
+                    placeholder = "Enter your email",
+                    leadingIconRes = R.drawable.ic_email,
+                    isError = uiState.emailError != null,
+                    errorMessage = uiState.emailError,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                )
+            }
             
-            ExposedDropdownMenuBox(
-                expanded = learningTargetExpanded,
-                onExpandedChange = { learningTargetExpanded = it },
+            // Password
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Top),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                OutlinedTextField(
-                    value = uiState.learningTarget,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Learning Target") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = learningTargetExpanded) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth()
-                )
-                ExposedDropdownMenu(
-                    expanded = learningTargetExpanded,
-                    onDismissRequest = { learningTargetExpanded = false }
-                ) {
-                    learningTargets.forEach { target ->
-                        DropdownMenuItem(
-                            text = { Text(target) },
-                            onClick = {
-                                viewModel.onLearningTargetChange(target)
-                                learningTargetExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Current Level Dropdown
-            var currentLevelExpanded by remember { mutableStateOf(false) }
-            val currentLevels = listOf("A1", "A2", "B1", "B2", "C1", "C2")
-
-            ExposedDropdownMenuBox(
-                expanded = currentLevelExpanded,
-                onExpandedChange = { currentLevelExpanded = it },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedTextField(
-                    value = uiState.currentLevel,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Current Level") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = currentLevelExpanded) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth()
-                )
-                ExposedDropdownMenu(
-                    expanded = currentLevelExpanded,
-                    onDismissRequest = { currentLevelExpanded = false }
-                ) {
-                    currentLevels.forEach { level ->
-                        DropdownMenuItem(
-                            text = { Text(level) },
-                            onClick = {
-                                viewModel.onCurrentLevelChange(level)
-                                currentLevelExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Email Input
-            OutlinedTextField(
-                value = uiState.email,
-                onValueChange = { viewModel.onEmailChange(it) },
-                label = { Text("Email Address") },
-                leadingIcon = { Icon(Icons.Default.Email, contentDescription = "Email") },
-                isError = uiState.emailError != null,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                modifier = Modifier.fillMaxWidth()
-            )
-            uiState.emailError?.let {
                 Text(
-                    text = it,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "Password",
+                    color = Color(0xff1e293b),
+                    lineHeight = 1.43.em,
+                    style = TextStyle(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 8.dp, top = 4.dp)
+                        .padding(start = 4.dp)
                 )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Password Input
-            OutlinedTextField(
-                value = uiState.password,
-                onValueChange = { viewModel.onPasswordChange(it) },
-                label = { Text("Password") },
-                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "Password") },
-                visualTransformation = PasswordVisualTransformation(),
-                isError = uiState.passwordError != null,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth()
-            )
-            uiState.passwordError?.let {
+                AppTextField(
+                    value = uiState.password,
+                    onValueChange = onPasswordChange,
+                    placeholder = "Create a password",
+                    leadingIconRes = R.drawable.ic_password,
+                    isError = uiState.passwordError != null,
+                    errorMessage = uiState.passwordError,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                )
                 Text(
-                    text = it,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "Must be at least 8 characters long.",
+                    color = Color(0xff64748b),
+                    lineHeight = 1.5.em,
+                    style = TextStyle(fontSize = 12.sp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 8.dp, top = 4.dp)
+                        .padding(start = 4.dp)
                 )
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Firebase Error Display
+            
             uiState.errorMessage?.let {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp)
+                        .padding(vertical = 4.dp)
                 ) {
                     Text(
                         text = it,
@@ -222,36 +334,163 @@ fun RegisterScreen(
                     )
                 }
             }
-
-            // Register Button
-            Button(
-                onClick = { viewModel.signUp() },
-                enabled = !uiState.isLoading && uiState.isEmailValid && uiState.isPasswordValid && uiState.displayName.trim().isNotEmpty(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .clip(RoundedCornerShape(8.dp))
-            ) {
-                if (uiState.isLoading) {
-                    CircularProgressIndicator(
-                        color = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                } else {
-                    Text("Sign Up", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Navigate back to Login
-            TextButton(onClick = onNavigateToLogin) {
-                Text(
-                    text = "Already have an account? Sign In",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium
-                )
-            }
         }
     }
 }
+
+@Composable
+private fun RegisterActions(
+    uiState: AuthUiState,
+    onSignUpClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        PrimaryButton(
+            text = "Sign Up",
+            onClick = onSignUpClick,
+            isEnabled = !uiState.isLoading && uiState.isEmailValid && uiState.isPasswordValid && uiState.email.isNotEmpty() && uiState.password.isNotEmpty() && uiState.displayName.trim().isNotEmpty(),
+            isLoading = uiState.isLoading
+        )
+    }
+}
+
+@Composable
+private fun RegisterSocialSection(
+    context: android.content.Context,
+    coroutineScope: CoroutineScope,
+    onGoogleLoginClick: (com.google.firebase.auth.AuthCredential) -> Unit,
+    onShowError: (String) -> Unit
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Top),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+        ) {
+            HorizontalDivider(
+                color = Color(0xffe2e8f0),
+                modifier = Modifier.weight(0.5f)
+            )
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Text(
+                    text = "OR JOIN WITH",
+                    color = Color(0xff64748b),
+                    lineHeight = 1.33.em,
+                    style = TextStyle(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 0.6.sp
+                    ),
+                    modifier = Modifier.wrapContentHeight(align = Alignment.CenterVertically)
+                )
+            }
+            HorizontalDivider(
+                color = Color(0xffe2e8f0),
+                modifier = Modifier.weight(0.5f)
+            )
+        }
+        SocialLoginButton(
+            text = "Continue with Google",
+            iconRes = R.drawable.ic_google,
+            onClick = {
+                coroutineScope.launch {
+                    try {
+                        val credentialManager = CredentialManager.create(context)
+                        val googleIdOption = GetGoogleIdOption.Builder()
+                            .setFilterByAuthorizedAccounts(false)
+                            .setServerClientId("175372711746-skgdl6dng1l8hmcsjq14q9hg7lfu7alr.apps.googleusercontent.com")
+                            .setAutoSelectEnabled(false)
+                            .build()
+                        val request = GetCredentialRequest.Builder()
+                            .addCredentialOption(googleIdOption)
+                            .build()
+                        val result = credentialManager.getCredential(
+                            context = context,
+                            request = request
+                        )
+                        val credential = result.credential
+                        if (credential is CustomCredential) {
+                            val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                            val idToken = googleIdTokenCredential.idToken
+                            val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
+                            onGoogleLoginClick(firebaseCredential)
+                        }
+                    } catch (e: Exception) {
+                        onShowError(e.localizedMessage ?: "Google Sign-In failed")
+                    }
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun RegisterFooter(onNavigateToLogin: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = "Already have an account?",
+                color = Color(0xff64748b),
+                textAlign = TextAlign.Center,
+                lineHeight = 1.5.em,
+                style = TextStyle(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                modifier = Modifier.wrapContentHeight(align = Alignment.CenterVertically)
+            )
+            Text(
+                text = "Login",
+                color = Color(0xff1a73e8),
+                textDecoration = TextDecoration.Underline,
+                textAlign = TextAlign.Center,
+                lineHeight = 1.5.em,
+                style = TextStyle(fontSize = 15.sp),
+                modifier = Modifier
+                    .wrapContentHeight(align = Alignment.CenterVertically)
+                    .clickable { onNavigateToLogin() }
+            )
+        }
+    }
+}
+//Start
+//@Preview(showBackground = true)
+//@Composable
+//fun RegisterScreenEmptyPreview() {
+//    RegisterContent(
+//        uiState = AuthUiState(),
+//        onDisplayNameChange = {},
+//        onEmailChange = {},
+//        onPasswordChange = {},
+//        onSignUpClick = {},
+//        onNavigateToLogin = {},
+//        onGoogleLoginClick = {},
+//        onShowError = {}
+//    )
+//}
+//
+//@Preview(showBackground = true)
+//@Composable
+//fun RegisterScreenLoadingPreview() {
+//    RegisterContent(
+//        uiState = AuthUiState(isLoading = true, email = "test@example.com", password = "password"),
+//        onDisplayNameChange = {},
+//        onEmailChange = {},
+//        onPasswordChange = {},
+//        onSignUpClick = {},
+//        onNavigateToLogin = {},
+//        onGoogleLoginClick = {},
+//        onShowError = {}
+//    )
+//}
+//End

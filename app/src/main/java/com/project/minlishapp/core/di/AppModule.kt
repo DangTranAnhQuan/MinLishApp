@@ -45,6 +45,12 @@ abstract class AppModule {
         cardRepositoryImpl: CardRepositoryImpl
     ): CardRepository
 
+    @Binds
+    @Singleton
+    abstract fun bindDailyStatRepository(
+        dailyStatRepositoryImpl: com.project.minlishapp.data.repository.DailyStatRepositoryImpl
+    ): com.project.minlishapp.domain.repository.DailyStatRepository
+
     companion object {
         @Provides
         @Singleton

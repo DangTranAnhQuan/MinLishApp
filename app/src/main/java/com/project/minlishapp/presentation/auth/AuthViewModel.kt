@@ -9,17 +9,24 @@ import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.AuthCredential
 import com.google.firebase.auth.FirebaseUser
 import com.project.minlishapp.domain.repository.AuthRepository
+import com.project.minlishapp.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val userRepository: UserRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -27,14 +34,53 @@ class AuthViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            authRepository.currentUser.collect { firebaseUser ->
-                _uiState.update {
-                    it.copy(
-                        isAuthenticated = firebaseUser != null,
-                        currentUserEmail = firebaseUser?.email
-                    )
+            authRepository.currentUser
+                .flatMapLatest { firebaseUser ->
+                    if (firebaseUser != null) {
+                        _uiState.update {
+                            it.copy(
+                                currentUserEmail = firebaseUser.email,
+                                displayName = if (it.displayName.isEmpty()) firebaseUser.displayName ?: "" else it.displayName
+                            )
+                        }
+                        userRepository.getUser(firebaseUser.uid)
+                    } else {
+                        flowOf(null)
+                    }
                 }
-            }
+                .collect { user ->
+                    if (user != null) {
+                        _uiState.update {
+                            it.copy(
+                                isAuthenticated = true,
+                                isProfileComplete = user.name.isNotEmpty(),
+                                isCheckingAuth = false
+                            )
+                        }
+                    } else {
+                        val isAuth = authRepository.currentUser.first() != null
+                        if (isAuth) {
+                            // User exists in Auth but not in Firestore yet
+                            _uiState.update {
+                                it.copy(
+                                    isAuthenticated = true,
+                                    isProfileComplete = false,
+                                    isCheckingAuth = false
+                                )
+                            }
+                        } else {
+                            // Not authenticated at all
+                            _uiState.update {
+                                it.copy(
+                                    isAuthenticated = false,
+                                    isProfileComplete = null,
+                                    isCheckingAuth = false,
+                                    currentUserEmail = null
+                                )
+                            }
+                        }
+                    }
+                }
         }
     }
 
@@ -92,7 +138,7 @@ class AuthViewModel @Inject constructor(
 
     fun login() {
         if (!_uiState.value.isEmailValid || !_uiState.value.isPasswordValid) {
-            _uiState.update { it.copy(errorMessage = "Please fix input errors") }
+            _uiState.update { it.copy(errorMessage = "Please correct the input errors") }
             return
         }
 
@@ -109,27 +155,56 @@ class AuthViewModel @Inject constructor(
     }
 
     fun signUp() {
-        if (!_uiState.value.isEmailValid || !_uiState.value.isPasswordValid || _uiState.value.displayName.trim().isEmpty()) {
-            _uiState.update { it.copy(errorMessage = "Please enter valid info for all fields") }
+        if (!_uiState.value.isEmailValid || !_uiState.value.isPasswordValid) {
+            _uiState.update { it.copy(errorMessage = "Please correct the input errors") }
             return
         }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val result = authRepository.signUpWithEmail(
+            val result = authRepository.signUpBasic(
                 _uiState.value.email,
-                _uiState.value.password,
-                _uiState.value.displayName,
+                _uiState.value.password
+            )
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    isRegisterSuccess = result.isSuccess,
+                    errorMessage = mapAuthException(result.exceptionOrNull())
+                )
+            }
+        }
+    }
+
+    fun completeProfileSetup() {
+        if (_uiState.value.displayName.trim().isEmpty()) {
+            _uiState.update { it.copy(errorMessage = "Full name cannot be empty") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val result = authRepository.completeProfileSetup(
+                _uiState.value.displayName.trim(),
                 _uiState.value.learningTarget,
                 _uiState.value.currentLevel
             )
             _uiState.update {
                 it.copy(
                     isLoading = false,
-                    errorMessage = mapAuthException(result.exceptionOrNull())
+                    isProfileSetupSuccess = result.isSuccess,
+                    errorMessage = result.exceptionOrNull()?.localizedMessage
                 )
             }
         }
+    }
+
+    fun resetRegisterSuccess() {
+        _uiState.update { it.copy(isRegisterSuccess = false) }
+    }
+
+    fun resetProfileSetupSuccess() {
+        _uiState.update { it.copy(isProfileSetupSuccess = false) }
     }
 
     fun loginWithCredential(credential: AuthCredential) {
@@ -152,6 +227,17 @@ class AuthViewModel @Inject constructor(
     fun logout() {
         viewModelScope.launch {
             authRepository.logout()
+            resetState()
+        }
+    }
+
+    fun resetState() {
+        _uiState.update {
+            AuthUiState(
+                learningTargets = SharedLearningTargets,
+                levels = SharedLevels,
+                isCheckingAuth = false // Maintain checked state
+            )
         }
     }
 
@@ -162,14 +248,31 @@ class AuthViewModel @Inject constructor(
     private fun mapAuthException(e: Throwable?): String? {
         if (e == null) return null
         return when (e) {
-            is FirebaseAuthInvalidCredentialsException -> "Sai email hoặc mật khẩu."
-            is FirebaseAuthUserCollisionException -> "Email này đã được đăng ký bởi tài khoản khác."
-            is FirebaseAuthWeakPasswordException -> "Mật khẩu quá yếu (tối thiểu phải có 6 ký tự)."
-            is FirebaseAuthInvalidUserException -> "Tài khoản không tồn tại hoặc đã bị vô hiệu hóa."
-            else -> e.localizedMessage ?: "Đã xảy ra lỗi không xác định."
+            is FirebaseAuthInvalidCredentialsException -> "Invalid email or password."
+            is FirebaseAuthUserCollisionException -> "This email is already registered."
+            is FirebaseAuthWeakPasswordException -> "Password is too weak."
+            is FirebaseAuthInvalidUserException -> "Account does not exist or has been disabled."
+            else -> e.localizedMessage ?: "An unknown error occurred."
         }
     }
 }
+
+data class LevelInfo(
+    val code: String,
+    val title: String,
+    val desc: String
+)
+
+val SharedLearningTargets = listOf("IELTS", "TOEIC", "Communication", "Career")
+
+val SharedLevels = listOf(
+    LevelInfo("A1", "Beginner", "Just starting out"),
+    LevelInfo("A2", "Elementary", "Can understand basic phrases"),
+    LevelInfo("B1", "Intermediate", "Can hold simple conversations"),
+    LevelInfo("B2", "Upper Intermediate", "Can speak fluently"),
+    LevelInfo("C1", "Advanced", "Can express complex ideas"),
+    LevelInfo("C2", "Proficient", "Near native speaker")
+)
 
 data class AuthUiState(
     val email: String = "",
@@ -184,5 +287,11 @@ data class AuthUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val isAuthenticated: Boolean = false,
-    val currentUserEmail: String? = null
+    val isCheckingAuth: Boolean = true,
+    val isRegisterSuccess: Boolean = false,
+    val isProfileSetupSuccess: Boolean = false,
+    val isProfileComplete: Boolean? = null,
+    val currentUserEmail: String? = null,
+    val learningTargets: List<String> = SharedLearningTargets,
+    val levels: List<LevelInfo> = SharedLevels
 )

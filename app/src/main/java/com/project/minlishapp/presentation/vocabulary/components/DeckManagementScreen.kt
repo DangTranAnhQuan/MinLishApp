@@ -144,6 +144,7 @@ fun DeckManagementScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Top),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f)
                     .padding(horizontal = 16.dp)
             ) {
                 // Error/Status Message
@@ -239,9 +240,6 @@ fun DeckManagementScreen(
                 Icon(Icons.Default.Add, contentDescription = null, tint = Color.White)
             }
         }
-
-        // Bottom Navigation Placeholder
-        BottomNav(Modifier.align(Alignment.BottomCenter))
     }
 }
 

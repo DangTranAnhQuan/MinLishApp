@@ -4,8 +4,13 @@
     <selectionStates>
       <SelectionState runConfigName="Unnamed">
         <option name="selectionMode" value="DROPDOWN" />
-<<<<<<< Updated upstream
-=======
+        <DropdownSelection timestamp="2026-06-02T04:24:31.237371600Z">
+          <Target type="DEFAULT_BOOT">
+            <handle>
+              <DeviceId pluginId="LocalEmulator" identifier="path=D:\Android\Setting\.android\avd\Pixel_9.avd" />
+            </handle>
+          </Target>
+        </DropdownSelection>
         <DialogSelection />
       </SelectionState>
       <SelectionState runConfigName="Unnamed (1)">
@@ -17,7 +22,6 @@
             </handle>
           </Target>
         </DropdownSelection>
->>>>>>> Stashed changes
         <DialogSelection />
       </SelectionState>
     </selectionStates>

@@ -9,9 +9,9 @@
               <option name="connection">
                 <ConnectionSetting>
                   <option name="appId" value="com.project.minlishapp" />
-                  <option name="mobileSdkAppId" value="1:123456789012:android:abcdef0123456789" />
-                  <option name="projectId" value="dummy-project-id" />
-                  <option name="projectNumber" value="123456789012" />
+                  <option name="mobileSdkAppId" value="1:175372711746:android:59ea3364ed4f29b62a3adb" />
+                  <option name="projectId" value="minlish-app" />
+                  <option name="projectNumber" value="175372711746" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

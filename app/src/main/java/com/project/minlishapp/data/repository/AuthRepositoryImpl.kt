@@ -39,28 +39,37 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun signUpWithEmail(
-        email: String,
-        password: String,
-        displayName: String,
-        learningTarget: String,
-        currentLevel: String
-    ): Result<FirebaseUser> {
+    override suspend fun signUpBasic(email: String, password: String): Result<FirebaseUser> {
         return try {
             val result = firebaseAuth.createUserWithEmailAndPassword(email, password).await()
             val user = result.user ?: throw Exception("User registration failed")
-            
-            // Update profile with display name
-            val profileUpdates = userProfileChangeRequest {
-                this.displayName = displayName
-            }
-            user.updateProfile(profileUpdates).await()
+            Result.success(user)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
-            // Save to Firestore with new schema properties
+    override suspend fun completeProfileSetup(
+        displayName: String,
+        learningTarget: String,
+        currentLevel: String
+    ): Result<Unit> {
+        return try {
+            val user = firebaseAuth.currentUser ?: throw Exception("No authenticated user found")
+
+            try {
+                val profileUpdates = userProfileChangeRequest {
+                    this.displayName = displayName
+                }
+                user.updateProfile(profileUpdates).await()
+            } catch (e: Exception) {
+                android.util.Log.w("AuthRepository", "Profile update failed: ${e.message}")
+            }
+
             val newUser = User(
                 uid = user.uid,
                 name = displayName,
-                email = email,
+                email = user.email ?: "",
                 learningTarget = learningTarget,
                 currentLevel = currentLevel,
                 currentStreak = 0,
@@ -68,15 +77,8 @@ class AuthRepositoryImpl @Inject constructor(
                 totalWordsLearned = 0,
                 createdAt = Date()
             )
-            
-            try {
-                userRepository.saveUser(newUser)
-            } catch (fsError: Exception) {
-                user.delete().await()
-                throw fsError
-            }
-
-            Result.success(user)
+            userRepository.saveUser(newUser)
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -86,23 +88,6 @@ class AuthRepositoryImpl @Inject constructor(
         return try {
             val result = firebaseAuth.signInWithCredential(credential).await()
             val user = result.user ?: throw Exception("Google Sign-In failed")
-            
-            val exists = userRepository.getUser(user.uid).first() != null
-            if (!exists) {
-                val newUser = User(
-                    uid = user.uid,
-                    name = user.displayName ?: "Google User",
-                    email = user.email ?: "",
-                    learningTarget = "IELTS",
-                    currentLevel = "A1",
-                    currentStreak = 0,
-                    lastLearnedDate = null,
-                    totalWordsLearned = 0,
-                    createdAt = Date()
-                )
-                userRepository.saveUser(newUser)
-            }
-            
             Result.success(user)
         } catch (e: Exception) {
             Result.failure(e)
