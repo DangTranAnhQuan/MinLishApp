@@ -3,9 +3,11 @@ package com.project.minlishapp.data.mapper
 import com.google.firebase.Timestamp
 import com.project.minlishapp.data.model.CardDto
 import com.project.minlishapp.data.model.DeckDto
+import com.project.minlishapp.data.model.PracticeAttemptDto
 import com.project.minlishapp.data.model.UserDto
 import com.project.minlishapp.domain.model.Card
 import com.project.minlishapp.domain.model.Deck
+import com.project.minlishapp.domain.model.PracticeAttempt
 import com.project.minlishapp.domain.model.User
 import java.util.Date
 
@@ -110,5 +112,23 @@ fun Card.toDto(): CardDto {
         sm2Interval = sm2Interval,
         nextReviewTime = Timestamp(nextReviewTime),
         createdAt = Timestamp(createdAt)
+    )
+}
+
+fun PracticeAttempt.toDto(): PracticeAttemptDto {
+    return PracticeAttemptDto(
+        id = id,
+        sessionId = sessionId,
+        userId = userId,
+        deckId = deckId,
+        cardId = cardId,
+        quizType = quizType.name,
+        sessionMode = sessionMode.name,
+        correct = isCorrect,
+        qualityScore = qualityScore,
+        sm2IntervalDays = sm2IntervalDays,
+        sm2EaseFactor = sm2EaseFactor,
+        nextReviewTime = Timestamp(nextReviewTime),
+        answeredAt = Timestamp(answeredAt)
     )
 }

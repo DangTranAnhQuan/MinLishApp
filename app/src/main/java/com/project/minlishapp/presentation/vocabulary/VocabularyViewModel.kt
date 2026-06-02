@@ -105,16 +105,23 @@ class VocabularyViewModel @Inject constructor(
         _uiState.update { it.copy(cardForm = update(it.cardForm)) }
     }
 
-    fun saveCard(deckId: String) {
+    fun saveCard(deckId: String, onSaved: () -> Unit = {}) {
+        val form = _uiState.value.cardForm
+        val word = form.word.trim()
+        if (word.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Word is required.") }
+            return
+        }
+
         viewModelScope.launch {
-            val user = authRepository.currentUser.first()
-            user?.uid?.let { userId ->
-                val form = _uiState.value.cardForm
+            runCatching {
+                val userId = authRepository.currentUser.first()?.uid
+                    ?: error("You need to sign in before saving a card.")
                 val card = Card(
                     id = UUID.randomUUID().toString(),
                     deckId = deckId,
                     userId = userId,
-                    word = form.word,
+                    word = word,
                     pronunciation = form.phonetic,
                     meaning = form.meaning,
                     definition = form.definition,
@@ -133,7 +140,12 @@ class VocabularyViewModel @Inject constructor(
                 }
 
                 // Reset form after save
-                _uiState.update { it.copy(cardForm = CardFormState()) }
+                _uiState.update { it.copy(cardForm = CardFormState(), errorMessage = null) }
+                onSaved()
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(errorMessage = throwable.localizedMessage ?: "Unable to save card.")
+                }
             }
         }
     }
@@ -160,11 +172,16 @@ class VocabularyViewModel @Inject constructor(
                                     .map { it.trim().removeSurrounding("\"") }
 
                                 if (parts.size >= 3) {
+                                    val word = parts.getOrNull(0)?.trim().orEmpty()
+                                    if (word.isBlank()) {
+                                        line = reader.readLine()
+                                        continue
+                                    }
                                     val card = Card(
                                         id = UUID.randomUUID().toString(),
                                         deckId = deckId,
                                         userId = userId,
-                                        word = parts.getOrNull(0)?.trim() ?: "",
+                                        word = word,
                                         pronunciation = parts.getOrNull(1)?.trim() ?: "",
                                         meaning = parts.getOrNull(2)?.trim() ?: "",
                                         definition = parts.getOrNull(3)?.trim() ?: "",

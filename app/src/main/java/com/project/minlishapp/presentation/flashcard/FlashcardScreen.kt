@@ -44,7 +44,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -57,6 +56,15 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.minlishapp.domain.usecase.srs.ReviewGrade
+import com.project.minlishapp.ui.theme.DarkText
+import com.project.minlishapp.ui.theme.GrayText
+import com.project.minlishapp.ui.theme.LightGraySurface
+import com.project.minlishapp.ui.theme.SoftWhite
+import com.project.minlishapp.ui.theme.VeryLightGray
+import com.project.minlishapp.ui.theme.VibrantBlue
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,25 +105,45 @@ fun FlashcardScreen(
     }
 
     Scaffold(
+        containerColor = SoftWhite,
         topBar = {
-            Header(onBack = onBack)
+            Header(
+                onBack = onBack,
+                title = if (uiState.isSpacedRepetitionReview) {
+                    "Ôn tập ngắt quãng"
+                } else {
+                    "Flashcard Learning"
+                }
+            )
         }
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background)
+                .background(SoftWhite)
         ) {
             when {
                 uiState.isLoading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center),
+                        color = VibrantBlue
+                    )
                 }
 
                 uiState.errorMessage != null && uiState.cards.isEmpty() -> {
                     EmptyState(
                         title = "Không thể tải thẻ",
                         message = uiState.errorMessage ?: "Đã xảy ra lỗi không xác định."
+                    )
+                }
+
+                uiState.isSessionCompleted -> {
+                    FlashcardCompletionState(
+                        isSpacedRepetitionReview = uiState.isSpacedRepetitionReview,
+                        reviewedCount = uiState.completedReviewCount,
+                        nextReviewTime = uiState.sessionNextReviewTime,
+                        onDone = onBack
                     )
                 }
 
@@ -129,16 +157,26 @@ fun FlashcardScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         EmptyState(
-                            title = "Chưa có thẻ nào",
-                            message = "Hãy thêm thẻ mới vào bộ từ trước khi học."
+                            title = if (uiState.isSpacedRepetitionReview) {
+                                "Đã ôn xong"
+                            } else {
+                                "Chưa có thẻ nào"
+                            },
+                            message = if (uiState.isSpacedRepetitionReview) {
+                                "Bạn không còn từ đã học nào đến hạn ôn tập."
+                            } else {
+                                "Hãy thêm thẻ mới vào bộ từ trước khi học."
+                            }
                         )
-                        Button(
-                            onClick = viewModel::insertTestData,
-                            modifier = Modifier
-                                .fillMaxWidth(0.8f)
-                                .padding(top = 16.dp)
-                        ) {
-                            Text("DEBUG: Insert Test Cards")
+                        if (!uiState.isSpacedRepetitionReview) {
+                            Button(
+                                onClick = viewModel::insertTestData,
+                                modifier = Modifier
+                                    .fillMaxWidth(0.8f)
+                                    .padding(top = 16.dp)
+                            ) {
+                                Text("DEBUG: Insert Test Cards")
+                            }
                         }
                     }
                 }
@@ -151,11 +189,20 @@ fun FlashcardScreen(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        SummaryRow(
-                            newWordsCount = uiState.newWordsCount,
-                            dueWordsCount = uiState.dueWordsCount,
-                            learnedWordsCount = uiState.learnedWordsCount
-                        )
+                        if (uiState.isSpacedRepetitionReview) {
+                            Text(
+                                text = "Còn ${uiState.cards.size} từ cần ôn",
+                                color = VibrantBlue,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            SummaryRow(
+                                newWordsCount = uiState.newWordsCount,
+                                dueWordsCount = uiState.dueWordsInDeckCount,
+                                learnedWordsCount = uiState.learnedWordsCount
+                            )
+                        }
 
                         Surface(
                             modifier = Modifier
@@ -163,8 +210,8 @@ fun FlashcardScreen(
                                 .height(360.dp)
                                 .clickable(enabled = !uiState.isSubmitting) { viewModel.toggleFlip() },
                             shape = RoundedCornerShape(28.dp),
-                            color = Color.White,
-                            border = BorderStroke(1.dp, Color(0xfff3f4f6)),
+                            color = SoftWhite,
+                            border = BorderStroke(1.dp, VeryLightGray),
                             shadowElevation = 12.dp
                         ) {
                             Box(
@@ -201,15 +248,16 @@ fun FlashcardScreen(
                         }
 
                         Text(
-                            text = "${uiState.currentCardIndex + 1}/${uiState.cards.size}",
+                            text = "${uiState.completedReviewCount + 1}/${uiState.sessionTotalCount}",
                             modifier = Modifier.fillMaxWidth(),
                             style = MaterialTheme.typography.labelLarge,
-                            color = Color(0xff0066ff),
+                            color = VibrantBlue,
                             textAlign = TextAlign.Center
                         )
 
                         LinearProgressIndicatorWithLabel(
-                            progress = (uiState.currentCardIndex + 1).toFloat() / uiState.cards.size.toFloat()
+                            progress = (uiState.completedReviewCount + 1).toFloat() /
+                                uiState.sessionTotalCount.coerceAtLeast(1).toFloat()
                         )
 
                         if (!uiState.isFlipped) {
@@ -217,7 +265,11 @@ fun FlashcardScreen(
                                 onClick = viewModel::toggleFlip,
                                 modifier = Modifier.fillMaxWidth(),
                                 enabled = !uiState.isSubmitting,
-                                shape = RoundedCornerShape(20.dp)
+                                shape = RoundedCornerShape(20.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = VibrantBlue,
+                                    contentColor = SoftWhite
+                                )
                             ) {
                                 Icon(imageVector = Icons.Filled.Refresh, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -274,6 +326,7 @@ fun FlashcardScreen(
 @Composable
 fun Header(
     onBack: () -> Unit,
+    title: String = "Flashcard Learning",
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -281,7 +334,7 @@ fun Header(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .background(color = Color.White)
+            .background(color = SoftWhite)
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         IconButton(
@@ -291,14 +344,14 @@ fun Header(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back",
-                tint = Color(0xff1f2937)
+                tint = DarkText
             )
         }
 
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
             Text(
-                text = "Flashcard Learning",
-                color = Color(0xff1f2937),
+                text = title,
+                color = DarkText,
                 lineHeight = 1.56.em,
                 style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold)
             )
@@ -349,7 +402,7 @@ private fun StatChip(
     Surface(
         modifier = modifier.height(86.dp),
         shape = RoundedCornerShape(18.dp),
-        color = Color(0xfff8f9fa),
+        color = LightGraySurface,
         shadowElevation = 2.dp
     ) {
         Column(
@@ -357,9 +410,9 @@ private fun StatChip(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Icon(imageVector = icon, contentDescription = null, tint = Color(0xff0066ff))
-            Text(text = value, style = MaterialTheme.typography.titleMedium, color = Color(0xff1f2937))
-            Text(text = title, style = MaterialTheme.typography.labelSmall, color = Color(0xff6b7280))
+            Icon(imageVector = icon, contentDescription = null, tint = VibrantBlue)
+            Text(text = value, style = MaterialTheme.typography.titleMedium, color = DarkText)
+            Text(text = title, style = MaterialTheme.typography.labelSmall, color = GrayText)
         }
     }
 }
@@ -373,14 +426,14 @@ private fun FrontFace(word: String) {
     ) {
         Text(
             text = "TỪ CẦN NHỚ",
-            color = Color(0xff6b7280),
+            color = GrayText,
             textAlign = TextAlign.Center,
             lineHeight = 1.43.em,
             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.7.sp)
         )
         Text(
             text = word,
-            color = Color(0xff1f2937),
+            color = DarkText,
             textAlign = TextAlign.Center,
             lineHeight = 1.11.em,
             style = TextStyle(fontSize = 36.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.9).sp)
@@ -390,11 +443,11 @@ private fun FrontFace(word: String) {
                 .width(64.dp)
                 .height(2.dp)
                 .clip(shape = RoundedCornerShape(9999.dp))
-                .background(color = Color(0xffe5e7eb))
+                .background(color = VeryLightGray)
         )
         Text(
             text = "Chạm vào thẻ hoặc nhấn nút bên\ndưới để lật và xem chi tiết.",
-            color = Color(0xff6b7280),
+            color = GrayText,
             textAlign = TextAlign.Center,
             lineHeight = 1.63.em,
             style = TextStyle(fontSize = 14.sp)
@@ -420,14 +473,14 @@ private fun BackFace(
     ) {
         Text(
             text = word,
-            color = Color(0xff0066ff),
+            color = VibrantBlue,
             textAlign = TextAlign.Center,
             lineHeight = 1.11.em,
             style = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold)
         )
         Text(
             text = pronunciation,
-            color = Color(0xff6b7280),
+            color = GrayText,
             textAlign = TextAlign.Center,
             style = TextStyle(fontSize = 14.sp)
         )
@@ -445,15 +498,15 @@ private fun DetailRow(label: String, value: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = Color(0xfff8f9fa),
+        color = LightGraySurface,
         shadowElevation = 2.dp
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(text = label, style = MaterialTheme.typography.labelMedium, color = Color(0xff0066ff))
-            Text(text = value, style = MaterialTheme.typography.bodyMedium, color = Color(0xff374151))
+            Text(text = label, style = MaterialTheme.typography.labelMedium, color = VibrantBlue)
+            Text(text = value, style = MaterialTheme.typography.bodyMedium, color = DarkText)
         }
     }
 }
@@ -478,14 +531,16 @@ private fun GradeActions(
                 enabled = enabled,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(20.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xff0066ff))
+                border = BorderStroke(1.dp, VibrantBlue),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = VibrantBlue)
             ) { Text("Again") }
             OutlinedButton(
                 onClick = onHard,
                 enabled = enabled,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(20.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xff0066ff))
+                border = BorderStroke(1.dp, VibrantBlue),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = VibrantBlue)
             ) { Text("Hard") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -494,14 +549,14 @@ private fun GradeActions(
                 enabled = enabled,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(20.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xff0066ff), contentColor = Color.White)
+                colors = ButtonDefaults.buttonColors(containerColor = VibrantBlue, contentColor = SoftWhite)
             ) { Text("Good") }
             Button(
                 onClick = onEasy,
                 enabled = enabled,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(20.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xff0066ff), contentColor = Color.White)
+                colors = ButtonDefaults.buttonColors(containerColor = VibrantBlue, contentColor = SoftWhite)
             ) { Text("Easy") }
         }
     }
@@ -512,12 +567,12 @@ private fun LinearProgressIndicatorWithLabel(
     progress: Float
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(text = "Tiến độ học trong bộ từ", style = MaterialTheme.typography.labelLarge, color = Color(0xff374151))
+        Text(text = "Tiến độ học trong bộ từ", style = MaterialTheme.typography.labelLarge, color = DarkText)
         androidx.compose.material3.LinearProgressIndicator(
             progress = { progress.coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth(),
-            color = Color(0xff0066ff),
-            trackColor = Color(0xffe5e7eb)
+            color = VibrantBlue,
+            trackColor = VeryLightGray
         )
     }
 }
@@ -537,6 +592,73 @@ private fun EmptyState(title: String, message: String) {
             Text(text = message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         }
     }
+}
+
+@Composable
+private fun FlashcardCompletionState(
+    isSpacedRepetitionReview: Boolean,
+    reviewedCount: Int,
+    nextReviewTime: Date?,
+    onDone: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = Icons.Filled.CheckCircle,
+            contentDescription = null,
+            tint = VibrantBlue
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = if (isSpacedRepetitionReview) {
+                "Đã ôn xong các từ đến hạn"
+            } else {
+                "Đã ôn xong bộ từ"
+            },
+            style = MaterialTheme.typography.headlineSmall,
+            color = DarkText,
+            textAlign = TextAlign.Center,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Bạn vừa hoàn thành $reviewedCount từ.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = GrayText,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = nextReviewTime?.let {
+                "Các từ vừa ôn sẽ đến hạn sớm nhất lúc ${formatReviewDateTime(it)}."
+            } ?: "Chưa có lịch ôn tiếp theo.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = GrayText,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        Button(
+            onClick = onDone,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = VibrantBlue,
+                contentColor = SoftWhite
+            )
+        ) {
+            Text(text = "Hoàn tất")
+        }
+    }
+}
+
+private fun formatReviewDateTime(date: Date): String {
+    return SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(date)
 }
 
 @Preview(showBackground = true, name = "Front State")
@@ -582,8 +704,8 @@ private fun FlashcardPreviewContent(showBackFace: Boolean) {
                     .fillMaxWidth()
                     .height(360.dp),
                 shape = RoundedCornerShape(28.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, Color(0xfff3f4f6)),
+                color = SoftWhite,
+                border = BorderStroke(1.dp, VeryLightGray),
                 shadowElevation = 12.dp
             ) {
                 Box(
@@ -613,7 +735,7 @@ private fun FlashcardPreviewContent(showBackFace: Boolean) {
                 text = "1/10",
                 modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.labelLarge,
-                color = Color(0xff0066ff),
+                color = VibrantBlue,
                 textAlign = TextAlign.Center
             )
 
@@ -624,7 +746,7 @@ private fun FlashcardPreviewContent(showBackFace: Boolean) {
                     onClick = {},
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xff0066ff), contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(containerColor = VibrantBlue, contentColor = SoftWhite)
                 ) {
                     Icon(imageVector = Icons.Filled.Refresh, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))

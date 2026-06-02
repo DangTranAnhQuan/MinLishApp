@@ -30,6 +30,16 @@ class GenerateQuizUseCase @Inject constructor() {
     ): MultipleChoiceQuestion? {
         val eligibleCards = eligibleMultipleChoiceCards(cards, distractorCards)
         val answerCard = chooseCard(eligibleCards, excludedCardId, random) ?: return null
+        return generateMultipleChoiceForCard(answerCard, distractorCards, random)
+    }
+
+    fun generateMultipleChoiceForCard(
+        answerCard: Card,
+        distractorCards: List<Card>,
+        random: Random = Random.Default
+    ): MultipleChoiceQuestion? {
+        if (!isEligibleMultipleChoiceCard(answerCard, distractorCards)) return null
+
         val correctAnswer = answerCard.meaning.trim()
         val distractors = distractorsFor(distractorCards, answerCard)
             .shuffled(random)
@@ -50,6 +60,11 @@ class GenerateQuizUseCase @Inject constructor() {
     ): FillInBlankQuestion? {
         val eligibleCards = eligibleFillInBlankCards(cards)
         val answerCard = chooseCard(eligibleCards, excludedCardId, random) ?: return null
+        return generateFillInBlankForCard(answerCard)
+    }
+
+    fun generateFillInBlankForCard(answerCard: Card): FillInBlankQuestion? {
+        if (!isEligibleFillInBlankCard(answerCard)) return null
 
         return FillInBlankQuestion(
             cardId = answerCard.id,
@@ -74,23 +89,15 @@ class GenerateQuizUseCase @Inject constructor() {
         return eligibleFillInBlankCards(cards).size
     }
 
-    private fun eligibleMultipleChoiceCards(
+    fun eligibleMultipleChoiceCards(
         cards: List<Card>,
         distractorCards: List<Card>
     ): List<Card> {
-        return cards.filter { card ->
-            card.word.isNotBlank() &&
-                card.meaning.isNotBlank() &&
-                distractorsFor(distractorCards, card).size >= DISTRACTOR_COUNT
-        }
+        return cards.filter { card -> isEligibleMultipleChoiceCard(card, distractorCards) }
     }
 
-    private fun eligibleFillInBlankCards(cards: List<Card>): List<Card> {
-        return cards.filter { card ->
-            card.word.isNotBlank() &&
-                card.example.isNotBlank() &&
-                card.example.contains(card.word, ignoreCase = true)
-        }
+    fun eligibleFillInBlankCards(cards: List<Card>): List<Card> {
+        return cards.filter(::isEligibleFillInBlankCard)
     }
 
     private fun chooseCard(
@@ -110,5 +117,17 @@ class GenerateQuizUseCase @Inject constructor() {
                     !meaning.equals(answerCard.meaning.trim(), ignoreCase = true)
             }
             .distinctBy { it.lowercase() }
+    }
+
+    private fun isEligibleMultipleChoiceCard(card: Card, distractorCards: List<Card>): Boolean {
+        return card.word.isNotBlank() &&
+            card.meaning.isNotBlank() &&
+            distractorsFor(distractorCards, card).size >= DISTRACTOR_COUNT
+    }
+
+    private fun isEligibleFillInBlankCard(card: Card): Boolean {
+        return card.word.isNotBlank() &&
+            card.example.isNotBlank() &&
+            card.example.contains(card.word, ignoreCase = true)
     }
 }

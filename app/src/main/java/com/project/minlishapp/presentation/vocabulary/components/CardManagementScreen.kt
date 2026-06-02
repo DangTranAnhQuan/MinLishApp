@@ -156,6 +156,16 @@ fun CardManagementScreen(
                         onValueChange = { newValue -> viewModel.updateCardForm { it.copy(tags = newValue) } }
                     )
                 }
+
+                uiState.errorMessage?.let { message ->
+                    item {
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
                 
                 item {
                     Box(modifier = Modifier.height(100.dp)) // Padding for bottom button
@@ -169,10 +179,7 @@ fun CardManagementScreen(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(20.dp)
-                .clickable { 
-                    viewModel.saveCard(deckId)
-                    onBack()
-                },
+                .clickable { viewModel.saveCard(deckId, onSaved = onBack) },
             shape = RoundedCornerShape(24.dp),
             color = Color(0xff0061ff),
             shadowElevation = 8.dp

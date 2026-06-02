@@ -5,10 +5,12 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.project.minlishapp.data.repository.AuthRepositoryImpl
 import com.project.minlishapp.data.repository.CardRepositoryImpl
 import com.project.minlishapp.data.repository.DeckRepositoryImpl
+import com.project.minlishapp.data.repository.PracticeRepositoryImpl
 import com.project.minlishapp.data.repository.UserRepositoryImpl
 import com.project.minlishapp.domain.repository.AuthRepository
 import com.project.minlishapp.domain.repository.CardRepository
 import com.project.minlishapp.domain.repository.DeckRepository
+import com.project.minlishapp.domain.repository.PracticeRepository
 import com.project.minlishapp.domain.repository.UserRepository
 import dagger.Binds
 import dagger.Module
@@ -44,6 +46,12 @@ abstract class AppModule {
     abstract fun bindCardRepository(
         cardRepositoryImpl: CardRepositoryImpl
     ): CardRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindPracticeRepository(
+        practiceRepositoryImpl: PracticeRepositoryImpl
+    ): PracticeRepository
 
     @Binds
     @Singleton
