@@ -232,7 +232,7 @@ class AuthViewModel @Inject constructor(
     }
 
     fun resetState() {
-        _uiState.update { 
+        _uiState.update {
             AuthUiState(
                 learningTargets = SharedLearningTargets,
                 levels = SharedLevels,
