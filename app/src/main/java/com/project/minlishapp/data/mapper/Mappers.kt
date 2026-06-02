@@ -2,10 +2,12 @@ package com.project.minlishapp.data.mapper
 
 import com.google.firebase.Timestamp
 import com.project.minlishapp.data.model.CardDto
+import com.project.minlishapp.data.model.DailyStatDto
 import com.project.minlishapp.data.model.DeckDto
 import com.project.minlishapp.data.model.PracticeAttemptDto
 import com.project.minlishapp.data.model.UserDto
 import com.project.minlishapp.domain.model.Card
+import com.project.minlishapp.domain.model.DailyStat
 import com.project.minlishapp.domain.model.Deck
 import com.project.minlishapp.domain.model.PracticeAttempt
 import com.project.minlishapp.domain.model.User
@@ -129,6 +131,33 @@ fun PracticeAttempt.toDto(): PracticeAttemptDto {
         sm2IntervalDays = sm2IntervalDays,
         sm2EaseFactor = sm2EaseFactor,
         nextReviewTime = Timestamp(nextReviewTime),
+        dueReview = isDueReview,
+        firstTimeLearned = isFirstTimeLearned,
         answeredAt = Timestamp(answeredAt)
+    )
+}
+
+fun DailyStatDto.toDomain(): DailyStat {
+    return DailyStat(
+        date = date,
+        wordsLearned = wordsLearned,
+        retentionCount = retentionCount,
+        dueReviewCount = dueReviewCount,
+        correctReviews = correctReviews,
+        totalReviews = totalReviews,
+        statsSchemaVersion = statsSchemaVersion
+    )
+}
+
+fun DailyStat.toDto(userId: String): DailyStatDto {
+    return DailyStatDto(
+        userId = userId,
+        date = date,
+        wordsLearned = wordsLearned,
+        retentionCount = retentionCount,
+        dueReviewCount = dueReviewCount,
+        correctReviews = correctReviews,
+        totalReviews = totalReviews,
+        statsSchemaVersion = statsSchemaVersion
     )
 }

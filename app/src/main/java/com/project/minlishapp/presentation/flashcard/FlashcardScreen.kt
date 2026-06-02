@@ -77,15 +77,15 @@ fun FlashcardScreen(
     val rotation = remember { Animatable(0f) }
     val density = LocalDensity.current
 
-    LaunchedEffect(uiState.currentCardIndex) {
-        rotation.snapTo(0f)
-    }
-
-    LaunchedEffect(uiState.isFlipped, uiState.currentCardIndex) {
-        rotation.animateTo(
-            targetValue = if (uiState.isFlipped) 180f else 0f,
-            animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing)
-        )
+    LaunchedEffect(uiState.isFlipped, currentCard?.id) {
+        if (uiState.isFlipped) {
+            rotation.animateTo(
+                targetValue = 180f,
+                animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing)
+            )
+        } else {
+            rotation.snapTo(0f)
+        }
     }
 
     // Tự động ẩn tin nhắn thông báo sau 2 giây
@@ -222,14 +222,14 @@ fun FlashcardScreen(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .graphicsLayer {
-                                            rotationY = rotation.value
+                                            rotationY = if (uiState.isFlipped) rotation.value else 0f
                                             cameraDistance = with(density) { 28.dp.toPx() }
-                                            if (rotation.value > 90f) scaleX = -1f
+                                            if (uiState.isFlipped && rotation.value > 90f) scaleX = -1f
                                         }
                                         .padding(24.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    if (rotation.value <= 90f) {
+                                    if (!uiState.isFlipped || rotation.value <= 90f) {
                                         FrontFace(word = currentCard.word)
                                     } else {
                                         BackFace(
@@ -273,7 +273,7 @@ fun FlashcardScreen(
                             ) {
                                 Icon(imageVector = Icons.Filled.Refresh, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text(text = "Lật thẻ để xem đáp án")
+                                Text(text = "Xem đáp án")
                             }
                         } else {
                             GradeActions(
@@ -444,13 +444,6 @@ private fun FrontFace(word: String) {
                 .height(2.dp)
                 .clip(shape = RoundedCornerShape(9999.dp))
                 .background(color = VeryLightGray)
-        )
-        Text(
-            text = "Chạm vào thẻ hoặc nhấn nút bên\ndưới để lật và xem chi tiết.",
-            color = GrayText,
-            textAlign = TextAlign.Center,
-            lineHeight = 1.63.em,
-            style = TextStyle(fontSize = 14.sp)
         )
     }
 }
@@ -750,7 +743,7 @@ private fun FlashcardPreviewContent(showBackFace: Boolean) {
                 ) {
                     Icon(imageVector = Icons.Filled.Refresh, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Lật thẻ để xem đáp án")
+                    Text(text = "Xem đáp án")
                 }
             } else {
                 GradeActions(

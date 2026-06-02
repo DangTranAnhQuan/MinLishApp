@@ -33,9 +33,9 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
-import com.project.minlishapp.domain.usecase.stat.UpdatePracticeStatsUseCase
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -49,8 +49,7 @@ class PracticeViewModel @Inject constructor(
     private val buildPracticeQueueUseCase: BuildPracticeQueueUseCase,
     private val applyPracticeAnswerUseCase: ApplyPracticeAnswerUseCase,
     private val getReviewScheduleUseCase: GetReviewScheduleUseCase,
-    private val getReviewForecastUseCase: GetReviewForecastUseCase,
-    private val updatePracticeStatsUseCase: UpdatePracticeStatsUseCase
+    private val getReviewForecastUseCase: GetReviewForecastUseCase
 ) : ViewModel() {
 
     private val initialDeckId = savedStateHandle.get<String>("deckId")
@@ -390,6 +389,8 @@ class PracticeViewModel @Inject constructor(
             card = currentCard,
             grade = grade
         )
+        val answeredAt = Date()
+        val isCorrect = feedback == AnswerFeedback.CORRECT
         val attempt = PracticeAttempt(
             id = UUID.randomUUID().toString(),
             sessionId = state.sessionId,
@@ -398,11 +399,15 @@ class PracticeViewModel @Inject constructor(
             cardId = cardId,
             quizType = state.quizType.toDomain(),
             sessionMode = state.sessionMode,
-            isCorrect = feedback == AnswerFeedback.CORRECT,
+            isCorrect = isCorrect,
             qualityScore = reviewResult.grade.qualityScore,
             sm2IntervalDays = reviewResult.reviewedCard.sm2Interval,
             sm2EaseFactor = reviewResult.reviewedCard.sm2EaseFactor,
-            nextReviewTime = reviewResult.reviewedCard.nextReviewTime
+            nextReviewTime = reviewResult.reviewedCard.nextReviewTime,
+            isDueReview = currentCard.sm2Interval > 0 &&
+                currentCard.nextReviewTime.time <= answeredAt.time,
+            isFirstTimeLearned = currentCard.sm2Interval == 0 && isCorrect,
+            answeredAt = answeredAt
         )
         val submission = PendingPracticeSubmission(
             attempt = attempt,
@@ -430,25 +435,6 @@ class PracticeViewModel @Inject constructor(
             }.onSuccess {
                 if (pendingSubmission?.attempt?.id == submission.attempt.id) {
                     pendingSubmission = null
-                    val originalCard = _uiState.value.userCards
-                        .firstOrNull { it.id == submission.attempt.cardId }
-                    if (originalCard != null) {
-                        launch {
-                            runCatching {
-                                updatePracticeStatsUseCase(
-                                    userId = submission.attempt.userId,
-                                    card = originalCard,
-                                    isCorrect = submission.attempt.isCorrect
-                                )
-                            }.onFailure { throwable ->
-                                android.util.Log.e(
-                                    "PracticeViewModel",
-                                    "Unable to update dashboard stats.",
-                                    throwable
-                                )
-                            }
-                        }
-                    }
                     _uiState.update {
                         val updatedUserCards = it.userCards.replaceCard(submission.reviewedCard)
                         refreshSetupDetails(

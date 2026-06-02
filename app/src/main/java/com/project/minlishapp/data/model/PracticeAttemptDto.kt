@@ -15,5 +15,7 @@ data class PracticeAttemptDto(
     val sm2IntervalDays: Int = 0,
     val sm2EaseFactor: Double = 2.5,
     val nextReviewTime: Timestamp? = null,
+    val dueReview: Boolean = false,
+    val firstTimeLearned: Boolean = false,
     val answeredAt: Timestamp? = null
 )

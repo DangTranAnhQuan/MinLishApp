@@ -26,6 +26,8 @@ class PracticeAttemptMapperTest {
             sm2IntervalDays = 6,
             sm2EaseFactor = 2.42,
             nextReviewTime = Date(answeredAt.time + 1_000),
+            isDueReview = true,
+            isFirstTimeLearned = false,
             answeredAt = answeredAt
         )
 
@@ -43,6 +45,8 @@ class PracticeAttemptMapperTest {
         assertEquals(6, dto.sm2IntervalDays)
         assertEquals(2.42, dto.sm2EaseFactor, 0.001)
         assertEquals(attempt.nextReviewTime, dto.nextReviewTime?.toDate())
+        assertTrue(dto.dueReview)
+        assertEquals(false, dto.firstTimeLearned)
         assertEquals(answeredAt, dto.answeredAt?.toDate())
     }
 }
