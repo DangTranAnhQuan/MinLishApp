@@ -15,6 +15,7 @@ import com.project.minlishapp.domain.usecase.quiz.FilterUsableFlashcardsUseCase
 import com.project.minlishapp.domain.usecase.srs.CalculateSm2NextReviewUseCase
 import com.project.minlishapp.domain.usecase.srs.GetDueCardsUseCase
 import com.project.minlishapp.domain.usecase.srs.ReviewGrade
+import com.project.minlishapp.domain.usecase.stat.UpdatePracticeStatsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,7 +39,8 @@ class FlashcardViewModel @Inject constructor(
     private val practiceRepository: PracticeRepository,
     private val calculateSm2NextReviewUseCase: CalculateSm2NextReviewUseCase,
     private val getDueCardsUseCase: GetDueCardsUseCase,
-    private val filterUsableFlashcardsUseCase: FilterUsableFlashcardsUseCase
+    private val filterUsableFlashcardsUseCase: FilterUsableFlashcardsUseCase,
+    private val updatePracticeStatsUseCase: UpdatePracticeStatsUseCase
 ) : ViewModel() {
 
     private val deckId: String = savedStateHandle.get<String>("deckId").orEmpty()
@@ -225,6 +227,21 @@ class FlashcardViewModel @Inject constructor(
                 }
                 if (updateSuccess == null) {
                     throw TimeoutException("Card update timed out after 8 seconds. Check Firestore connection.")
+                }
+                launch {
+                    runCatching {
+                        updatePracticeStatsUseCase(
+                            userId = userId,
+                            card = currentCard,
+                            isCorrect = attempt.isCorrect
+                        )
+                    }.onFailure { throwable ->
+                        android.util.Log.e(
+                            "FlashcardViewModel",
+                            "Unable to update dashboard stats.",
+                            throwable
+                        )
+                    }
                 }
                 reviewedCardIds += updatedCard.id
                 val currentState = _uiState.value

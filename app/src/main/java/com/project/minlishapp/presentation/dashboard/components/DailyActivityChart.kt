@@ -25,10 +25,11 @@ import com.project.minlishapp.ui.theme.DarkText
 import com.project.minlishapp.ui.theme.VeryLightGray
 import com.project.minlishapp.ui.theme.VibrantBlue
 import com.project.minlishapp.ui.theme.VibrantBlueLight
+import androidx.compose.ui.graphics.Color
 
 @Composable
 fun DailyActivityChart(
-    data: List<Float>, 
+    data: List<Float>,
     modifier: Modifier = Modifier
 ) {
     Text(
@@ -38,7 +39,7 @@ fun DailyActivityChart(
         color = DarkText,
         modifier = Modifier.padding(bottom = 16.dp)
     )
-    
+
     val animationProgress = remember { Animatable(0f) }
     LaunchedEffect(data) {
         animationProgress.animateTo(
@@ -62,12 +63,18 @@ fun DailyActivityChart(
                 val spacing = barWidth
                 val gridLines = 4
                 val gridSpacing = height / gridLines
-                
+
                 val dashPathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
                 val barBrush = Brush.verticalGradient(
                     colors = listOf(VibrantBlueLight, VibrantBlue),
-                    startY = 0f, 
-                    endY = height 
+                    startY = 0f,
+                    endY = height
+                )
+
+                val todayBarBrush = Brush.verticalGradient(
+                    colors = listOf(Color(0xFFFFB74D), Color(0xFFFF9800)),
+                    startY = 0f,
+                    endY = height
                 )
 
                 onDrawBehind {
@@ -81,15 +88,15 @@ fun DailyActivityChart(
                         )
                     }
 
-                    val currentProgress = animationProgress.value 
-                    
+                    val currentProgress = animationProgress.value
+
                     data.forEachIndexed { index, value ->
                         val barHeight = (value / maxData) * height * currentProgress
                         val x = index * (barWidth + spacing) + spacing / 2
                         val y = height - barHeight
 
                         drawRoundRect(
-                            brush = barBrush,
+                            brush = if (index == data.size - 1) todayBarBrush else barBrush,
                             topLeft = Offset(x, y),
                             size = Size(barWidth, barHeight),
                             cornerRadius = CornerRadius(barWidth / 2, barWidth / 2)
@@ -98,5 +105,29 @@ fun DailyActivityChart(
                 }
             }
     )
-}
 
+    val daysOfWeek = remember {
+        val format = java.text.SimpleDateFormat("EEE\ndd", java.util.Locale.getDefault())
+        (6 downTo 0).map { i ->
+            val cal = java.util.Calendar.getInstance()
+            cal.add(java.util.Calendar.DAY_OF_YEAR, -i)
+            format.format(cal.time)
+        }
+    }
+
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+    ) {
+        daysOfWeek.forEachIndexed { index, day ->
+            Text(
+                text = day,
+                fontSize = 12.sp,
+                color = if (index == daysOfWeek.size - 1) Color(0xFFFF9800) else com.project.minlishapp.ui.theme.GrayText,
+                modifier = Modifier.weight(1f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                lineHeight = 16.sp
+            )
+        }
+    }
+}

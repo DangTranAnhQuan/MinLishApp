@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
+import com.project.minlishapp.domain.usecase.stat.UpdatePracticeStatsUseCase
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -48,7 +49,8 @@ class PracticeViewModel @Inject constructor(
     private val buildPracticeQueueUseCase: BuildPracticeQueueUseCase,
     private val applyPracticeAnswerUseCase: ApplyPracticeAnswerUseCase,
     private val getReviewScheduleUseCase: GetReviewScheduleUseCase,
-    private val getReviewForecastUseCase: GetReviewForecastUseCase
+    private val getReviewForecastUseCase: GetReviewForecastUseCase,
+    private val updatePracticeStatsUseCase: UpdatePracticeStatsUseCase
 ) : ViewModel() {
 
     private val initialDeckId = savedStateHandle.get<String>("deckId")
@@ -428,6 +430,25 @@ class PracticeViewModel @Inject constructor(
             }.onSuccess {
                 if (pendingSubmission?.attempt?.id == submission.attempt.id) {
                     pendingSubmission = null
+                    val originalCard = _uiState.value.userCards
+                        .firstOrNull { it.id == submission.attempt.cardId }
+                    if (originalCard != null) {
+                        launch {
+                            runCatching {
+                                updatePracticeStatsUseCase(
+                                    userId = submission.attempt.userId,
+                                    card = originalCard,
+                                    isCorrect = submission.attempt.isCorrect
+                                )
+                            }.onFailure { throwable ->
+                                android.util.Log.e(
+                                    "PracticeViewModel",
+                                    "Unable to update dashboard stats.",
+                                    throwable
+                                )
+                            }
+                        }
+                    }
                     _uiState.update {
                         val updatedUserCards = it.userCards.replaceCard(submission.reviewedCard)
                         refreshSetupDetails(
