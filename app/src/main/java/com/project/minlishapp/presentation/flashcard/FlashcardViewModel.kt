@@ -3,9 +3,15 @@ package com.project.minlishapp.presentation.flashcard
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.minlishapp.core.navigation.Screen
 import com.project.minlishapp.domain.model.Card
+import com.project.minlishapp.domain.model.PracticeAttempt
+import com.project.minlishapp.domain.model.PracticeQuizType
+import com.project.minlishapp.domain.model.PracticeSessionMode
 import com.project.minlishapp.domain.repository.AuthRepository
 import com.project.minlishapp.domain.repository.CardRepository
+import com.project.minlishapp.domain.repository.PracticeRepository
+import com.project.minlishapp.domain.usecase.quiz.FilterUsableFlashcardsUseCase
 import com.project.minlishapp.domain.usecase.srs.CalculateSm2NextReviewUseCase
 import com.project.minlishapp.domain.usecase.srs.GetDueCardsUseCase
 import com.project.minlishapp.domain.usecase.srs.ReviewGrade
@@ -21,6 +27,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import com.project.minlishapp.utils.TestDataInjection
+import java.util.Date
+import java.util.UUID
 import java.util.concurrent.TimeoutException
 
 @HiltViewModel
@@ -28,14 +36,26 @@ class FlashcardViewModel @Inject constructor(
     private val savedStateHandle: SavedStateHandle,
     private val authRepository: AuthRepository,
     private val cardRepository: CardRepository,
+    private val practiceRepository: PracticeRepository,
     private val calculateSm2NextReviewUseCase: CalculateSm2NextReviewUseCase,
-    private val getDueCardsUseCase: GetDueCardsUseCase
+    private val getDueCardsUseCase: GetDueCardsUseCase,
+    private val filterUsableFlashcardsUseCase: FilterUsableFlashcardsUseCase
 ) : ViewModel() {
 
     private val deckId: String = savedStateHandle.get<String>("deckId").orEmpty()
+    private val isSpacedRepetitionReview =
+        deckId == Screen.FlashcardLearning.SPACED_REPETITION_DECK_ID
+    private val sessionId = UUID.randomUUID().toString()
+    private val reviewedCardIds = mutableSetOf<String>()
     private var dueCardsJob: Job? = null
+    private var pendingSubmission: PendingFlashcardSubmission? = null
 
-    private val _uiState = MutableStateFlow(FlashcardUiState(deckId = deckId))
+    private val _uiState = MutableStateFlow(
+        FlashcardUiState(
+            deckId = deckId,
+            isSpacedRepetitionReview = isSpacedRepetitionReview
+        )
+    )
     val uiState: StateFlow<FlashcardUiState> = _uiState.asStateFlow()
 
     init {
@@ -44,7 +64,7 @@ class FlashcardViewModel @Inject constructor(
                 isLoading = false,
                 errorMessage = "Thiếu deckId để học flashcard."
             )
-        } else {
+        } else if (!isSpacedRepetitionReview) {
             observeDeckCards()
         }
 
@@ -54,21 +74,61 @@ class FlashcardViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collectLatest { userId ->
                     dueCardsJob?.cancel()
+                    if (_uiState.value.userId != userId) {
+                        pendingSubmission = null
+                    }
                     if (userId.isNullOrBlank()) {
                         _uiState.value = _uiState.value.copy(
                             userId = null,
-                            dueWordsCount = 0
+                            dueWordsCount = 0,
+                            isLoading = if (isSpacedRepetitionReview) false else _uiState.value.isLoading,
+                            errorMessage = if (isSpacedRepetitionReview) {
+                                "Bạn cần đăng nhập để ôn tập."
+                            } else {
+                                _uiState.value.errorMessage
+                            }
                         )
                     } else {
                         _uiState.value = _uiState.value.copy(userId = userId)
                         dueCardsJob = launch {
                             runCatching {
                                 getDueCardsUseCase(userId, System.currentTimeMillis()).collectLatest { dueCards ->
-                                    _uiState.value = _uiState.value.copy(dueWordsCount = dueCards.size)
+                                    val learnedDueCards = dueCards
+                                        .filter { it.sm2Interval > 0 }
+                                        .sortedBy { it.nextReviewTime.time }
+                                        .let(filterUsableFlashcardsUseCase::invoke)
+                                        .filterNot { it.id in reviewedCardIds }
+                                    _uiState.value = if (isSpacedRepetitionReview) {
+                                        _uiState.value.copy(
+                                            cards = learnedDueCards,
+                                            currentCardIndex = _uiState.value.currentCardIndex
+                                                .coerceAtMost((learnedDueCards.size - 1).coerceAtLeast(0)),
+                                            isLoading = false,
+                                            newWordsCount = 0,
+                                            learnedWordsCount = learnedDueCards.size,
+                                            dueWordsCount = learnedDueCards.size,
+                                            dueWordsInDeckCount = learnedDueCards.size,
+                                            sessionTotalCount = maxOf(
+                                                _uiState.value.sessionTotalCount,
+                                                learnedDueCards.size + reviewedCardIds.size
+                                            ),
+                                            errorMessage = null
+                                        )
+                                    } else {
+                                        _uiState.value.copy(dueWordsCount = learnedDueCards.size)
+                                    }
                                 }
                             }.onFailure { throwable ->
                                 // Log but don't crash - due cards are optional
-                                _uiState.value = _uiState.value.copy(dueWordsCount = 0)
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = if (isSpacedRepetitionReview) false else _uiState.value.isLoading,
+                                    dueWordsCount = 0,
+                                    errorMessage = if (isSpacedRepetitionReview) {
+                                        throwable.localizedMessage ?: "Không thể tải từ cần ôn."
+                                    } else {
+                                        _uiState.value.errorMessage
+                                    }
+                                )
                             }
                         }
                     }
@@ -80,19 +140,27 @@ class FlashcardViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 cardRepository.getCardsInDeck(deckId).collectLatest { cards ->
-                    val currentIndex = if (cards.isEmpty()) {
+                    val usableCards = filterUsableFlashcardsUseCase(cards)
+                    val remainingCards = usableCards.filterNot { it.id in reviewedCardIds }
+                    val currentIndex = if (remainingCards.isEmpty()) {
                         0
                     } else {
-                        _uiState.value.currentCardIndex.coerceIn(0, cards.lastIndex)
+                        _uiState.value.currentCardIndex.coerceIn(0, remainingCards.lastIndex)
                     }
                     val now = System.currentTimeMillis()
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        cards = cards,
+                        cards = remainingCards,
                         currentCardIndex = currentIndex,
-                        newWordsCount = cards.count { it.sm2Repetitions == 0 },
-                        learnedWordsCount = cards.count { it.sm2Repetitions > 0 },
-                        dueWordsInDeckCount = cards.count { it.nextReviewTime.time <= now },
+                        newWordsCount = usableCards.count { it.sm2Interval == 0 },
+                        learnedWordsCount = usableCards.count { it.sm2Interval > 0 },
+                        dueWordsInDeckCount = usableCards.count {
+                            it.sm2Interval > 0 && it.nextReviewTime.time <= now
+                        },
+                        sessionTotalCount = maxOf(
+                            _uiState.value.sessionTotalCount,
+                            remainingCards.size + reviewedCardIds.size
+                        ),
                         errorMessage = null
                     )
                 }
@@ -125,29 +193,56 @@ class FlashcardViewModel @Inject constructor(
     }
 
     fun reviewCurrentCard(grade: ReviewGrade) {
+        if (_uiState.value.isSubmitting) return
+
         val currentCard = currentCard() ?: return
+        val userId = _uiState.value.userId
+        if (userId.isNullOrBlank()) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Bạn cần đăng nhập để lưu kết quả ôn tập."
+            )
+            return
+        }
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSubmitting = true, statusMessage = null, errorMessage = null)
             runCatching {
-                val updatedCard = calculateSm2NextReviewUseCase(currentCard, grade)
+                val submission = pendingSubmission
+                    ?.takeIf { it.attempt.cardId == currentCard.id }
+                    ?: createSubmission(currentCard, userId, grade).also { pendingSubmission = it }
+                val attempt = submission.attempt
+                val updatedCard = submission.reviewedCard
                 // Add timeout (8 seconds) to prevent hanging indefinitely when Firestore is unavailable
                 val updateSuccess = withTimeoutOrNull(8000L) {
-                    cardRepository.updateCard(updatedCard)
+                    practiceRepository.saveReviewedAttempt(attempt, updatedCard)
                     true
                 }
                 if (updateSuccess == null) {
                     throw TimeoutException("Card update timed out after 8 seconds. Check Firestore connection.")
                 }
-                val nextIndex = if (_uiState.value.cards.size <= 1) {
-                    0
-                } else {
-                    (_uiState.value.currentCardIndex + 1) % _uiState.value.cards.size
+                if (pendingSubmission?.attempt?.id == attempt.id) {
+                    pendingSubmission = null
                 }
-                _uiState.value = _uiState.value.copy(
+                reviewedCardIds += updatedCard.id
+                val currentState = _uiState.value
+                val remainingCards = currentState.cards.filterNot { it.id == updatedCard.id }
+                val nextIndex = currentState.currentCardIndex
+                    .coerceAtMost((remainingCards.size - 1).coerceAtLeast(0))
+                _uiState.value = currentState.copy(
+                    cards = remainingCards,
                     currentCardIndex = nextIndex,
                     isFlipped = false,
                     isSubmitting = false,
-                    statusMessage = when (grade) {
+                    isSessionCompleted = remainingCards.isEmpty(),
+                    completedReviewCount = reviewedCardIds.size,
+                    sessionTotalCount = maxOf(currentState.sessionTotalCount, reviewedCardIds.size),
+                    sessionNextReviewTime = listOfNotNull(
+                        currentState.sessionNextReviewTime,
+                        updatedCard.nextReviewTime
+                    ).minByOrNull { it.time },
+                    dueWordsCount = if (isSpacedRepetitionReview) remainingCards.size else currentState.dueWordsCount,
+                    dueWordsInDeckCount = if (isSpacedRepetitionReview) remainingCards.size else currentState.dueWordsInDeckCount,
+                    learnedWordsCount = if (isSpacedRepetitionReview) remainingCards.size else currentState.learnedWordsCount,
+                    statusMessage = when (submission.grade) {
                         ReviewGrade.AGAIN -> "Đã đánh dấu cần ôn lại."
                         ReviewGrade.HARD -> "Đã cập nhật mức nhớ khó."
                         ReviewGrade.GOOD -> "Đã ghi nhận mức nhớ tốt."
@@ -161,6 +256,43 @@ class FlashcardViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private fun createSubmission(
+        currentCard: Card,
+        userId: String,
+        grade: ReviewGrade
+    ): PendingFlashcardSubmission {
+        val updatedCard = calculateSm2NextReviewUseCase(currentCard, grade)
+        val answeredAt = Date()
+        val isCorrect = grade.qualityScore >= ReviewGrade.GOOD.qualityScore
+        val attempt = PracticeAttempt(
+            id = UUID.randomUUID().toString(),
+            sessionId = sessionId,
+            userId = userId,
+            deckId = currentCard.deckId,
+            cardId = currentCard.id,
+            quizType = PracticeQuizType.FLASHCARD,
+            sessionMode = if (isSpacedRepetitionReview) {
+                PracticeSessionMode.SPACED_REPETITION
+            } else {
+                PracticeSessionMode.DECK_PRACTICE
+            },
+            isCorrect = isCorrect,
+            qualityScore = grade.qualityScore,
+            sm2IntervalDays = updatedCard.sm2Interval,
+            sm2EaseFactor = updatedCard.sm2EaseFactor,
+            nextReviewTime = updatedCard.nextReviewTime,
+            isDueReview = currentCard.sm2Interval > 0 &&
+                currentCard.nextReviewTime.time <= answeredAt.time,
+            isFirstTimeLearned = currentCard.sm2Interval == 0 && isCorrect,
+            answeredAt = answeredAt
+        )
+        return PendingFlashcardSubmission(
+            attempt = attempt,
+            reviewedCard = updatedCard,
+            grade = grade
+        )
     }
 
     fun clearStatusMessage() {
@@ -202,8 +334,15 @@ class FlashcardViewModel @Inject constructor(
     }
 }
 
+private data class PendingFlashcardSubmission(
+    val attempt: PracticeAttempt,
+    val reviewedCard: Card,
+    val grade: ReviewGrade
+)
+
 data class FlashcardUiState(
     val deckId: String = "",
+    val isSpacedRepetitionReview: Boolean = false,
     val userId: String? = null,
     val cards: List<Card> = emptyList(),
     val currentCardIndex: Int = 0,
@@ -214,7 +353,10 @@ data class FlashcardUiState(
     val learnedWordsCount: Int = 0,
     val dueWordsCount: Int = 0,
     val dueWordsInDeckCount: Int = 0,
+    val completedReviewCount: Int = 0,
+    val sessionTotalCount: Int = 0,
+    val sessionNextReviewTime: java.util.Date? = null,
+    val isSessionCompleted: Boolean = false,
     val statusMessage: String? = null,
     val errorMessage: String? = null
 )
-

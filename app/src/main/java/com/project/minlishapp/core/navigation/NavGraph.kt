@@ -109,6 +109,12 @@ fun NavGraph(
             QuizScreen(
                 onBack = { navController.navigateBackOrToRegister() },
                 onNavigateToDashboard = { navController.navigate(Screen.Main.route) },
+                onStartFlashcardReview = { deckId ->
+                    navController.navigate(
+                        deckId?.let(Screen.FlashcardLearning::createRoute)
+                            ?: Screen.FlashcardLearning.createSpacedRepetitionRoute()
+                    )
+                },
                 viewModel = hiltViewModel()
             )
         }
@@ -147,6 +153,9 @@ fun MainNavGraph(
                 },
                 onAddCardClick = { deckId ->
                     rootNavController.navigate(Screen.CardList.createRoute(deckId))
+                },
+                onLearnDeckClick = { deckId ->
+                    rootNavController.navigate(Screen.FlashcardLearning.createRoute(deckId))
                 }
             )
         }
@@ -158,6 +167,12 @@ fun MainNavGraph(
                     navController.navigate(Screen.MainDashboard.route) {
                         popUpTo(Screen.MainDashboard.route)
                     }
+                },
+                onStartFlashcardReview = { deckId ->
+                    rootNavController.navigate(
+                        deckId?.let(Screen.FlashcardLearning::createRoute)
+                            ?: Screen.FlashcardLearning.createSpacedRepetitionRoute()
+                    )
                 }
             )
         }

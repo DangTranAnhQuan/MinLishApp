@@ -27,6 +27,9 @@ sealed class Screen(val route: String, val title: String? = null) {
 
     object FlashcardLearning : Screen("flashcard_learning/{deckId}") {
         fun createRoute(deckId: String) = "flashcard_learning/$deckId"
+        fun createSpacedRepetitionRoute() = createRoute(SPACED_REPETITION_DECK_ID)
+
+        const val SPACED_REPETITION_DECK_ID = "__spaced_repetition__"
     }
 
     object Practice : Screen("practice/{deckId}") {
@@ -37,4 +40,3 @@ sealed class Screen(val route: String, val title: String? = null) {
         const val ROOT_GRAPH = "root"
     }
 }
-

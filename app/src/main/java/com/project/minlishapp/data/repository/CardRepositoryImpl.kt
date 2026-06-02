@@ -115,7 +115,7 @@ class CardRepositoryImpl @Inject constructor(
     override fun getLearnedCardsCount(userId: String): Flow<Int> = callbackFlow {
         val listener = firestore.collection("cards")
             .whereEqualTo("userId", userId)
-            .whereGreaterThan("sm2Repetitions", 0)
+            .whereGreaterThan("sm2Interval", 0)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)

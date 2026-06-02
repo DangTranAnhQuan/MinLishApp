@@ -77,6 +77,7 @@ fun DeckManagementScreen(
     onImportExportClick: () -> Unit,
     onDeckClick: (String) -> Unit,
     onAddCardClick: (String) -> Unit,
+    onLearnDeckClick: (String) -> Unit,
     viewModel: VocabularyViewModel = hiltViewModel(),
     modifier: Modifier = Modifier
 ) {
@@ -205,6 +206,7 @@ fun DeckManagementScreen(
                             DeckItem(
                                 deck = deck,
                                 onClick = { onDeckClick(deck.id) },
+                                onLearn = { onLearnDeckClick(deck.id) },
                                 onDelete = { viewModel.deleteDeck(deck.id) },
                                 onImport = {
                                     selectedDeckIdForImport = deck.id
@@ -247,6 +249,7 @@ fun DeckManagementScreen(
 fun DeckItem(
     deck: Deck, 
     onClick: () -> Unit, 
+    onLearn: () -> Unit,
     onDelete: () -> Unit,
     onImport: () -> Unit,
     onExport: () -> Unit
@@ -312,6 +315,10 @@ fun DeckItem(
                     Icon(Icons.Default.MoreVert, contentDescription = null, tint = Color(0xff49454f))
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Học Flashcard") },
+                        onClick = { onLearn(); showMenu = false }
+                    )
                     DropdownMenuItem(
                         text = { Text("Import CSV") }, 
                         onClick = { onImport(); showMenu = false }
@@ -417,5 +424,5 @@ fun NavItem(label: String, icon: String, selected: Boolean) {
 @Preview(widthDp = 375, heightDp = 840)
 @Composable
 private fun DeckManagementScreenPreview() {
-    DeckManagementScreen({}, {}, {})
+    DeckManagementScreen({}, {}, {}, {})
  }

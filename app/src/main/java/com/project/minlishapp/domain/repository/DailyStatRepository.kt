@@ -5,12 +5,4 @@ import kotlinx.coroutines.flow.Flow
 
 interface DailyStatRepository {
     fun getWeeklyStats(userId: String): Flow<List<DailyStat>>
-    suspend fun recordReview(
-        userId: String, 
-        dateString: String, 
-        isCorrect: Boolean, 
-        isFirstTimeLearned: Boolean,
-        isRetention: Boolean
-    )
 }
-
