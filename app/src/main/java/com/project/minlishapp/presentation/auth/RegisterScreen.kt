@@ -3,9 +3,13 @@ package com.project.minlishapp.presentation.auth
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -93,10 +97,12 @@ fun RegisterScreen(
             .background(Color.White)
             .systemBarsPadding()
             .imePadding()
-            .padding(horizontal = 16.dp, vertical = 48.dp)
+            .padding(horizontal = 16.dp, vertical = 0.dp)
+            .verticalScroll(rememberScrollState())
     ) {
+        Spacer(modifier = Modifier.weight(2f))
         RegisterHeader()
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.weight(1f))
         RegisterForm(
             uiState = uiState,
             onDisplayNameChange = { viewModel.onDisplayNameChange(it) },
@@ -106,13 +112,13 @@ fun RegisterScreen(
 //            onEmailChange = onEmailChange,
 //            onPasswordChange = onPasswordChange
         )
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.weight(1f))
         RegisterActions(
             uiState = uiState,
             onSignUpClick = { viewModel.signUp() }
 //            onSignUpClick = onSignUpClick
         )
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.weight(0.8f))
         RegisterSocialSection(
             context = context,
             coroutineScope = coroutineScope,
@@ -121,10 +127,11 @@ fun RegisterScreen(
 //            onGoogleLoginClick = onGoogleLoginClick,
 //            onShowError = onShowError
         )
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.weight(0.8f))
         RegisterFooter(
             onNavigateToLogin = onNavigateToLogin
         )
+        Spacer(modifier = Modifier.weight(1.5f))
     }
 }
 
