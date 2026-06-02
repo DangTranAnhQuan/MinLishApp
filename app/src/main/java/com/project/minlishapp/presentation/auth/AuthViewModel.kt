@@ -53,17 +53,31 @@ class AuthViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(
                                 isAuthenticated = true,
-                                isCheckingAuth = false,
-                                isProfileComplete = user.name.isNotEmpty()
+                                isProfileComplete = user.name.isNotEmpty(),
+                                isCheckingAuth = false
                             )
                         }
                     } else {
-                        _uiState.update {
-                            AuthUiState(
-                                isCheckingAuth = false,
-                                learningTargets = SharedLearningTargets,
-                                levels = SharedLevels
-                            )
+                        val isAuth = authRepository.currentUser.first() != null
+                        if (isAuth) {
+                            // User exists in Auth but not in Firestore yet
+                            _uiState.update {
+                                it.copy(
+                                    isAuthenticated = true,
+                                    isProfileComplete = false,
+                                    isCheckingAuth = false
+                                )
+                            }
+                        } else {
+                            // Not authenticated at all
+                            _uiState.update {
+                                it.copy(
+                                    isAuthenticated = false,
+                                    isProfileComplete = null,
+                                    isCheckingAuth = false,
+                                    currentUserEmail = null
+                                )
+                            }
                         }
                     }
                 }
@@ -221,7 +235,8 @@ class AuthViewModel @Inject constructor(
         _uiState.update {
             AuthUiState(
                 learningTargets = SharedLearningTargets,
-                levels = SharedLevels
+                levels = SharedLevels,
+                isCheckingAuth = false // Maintain checked state
             )
         }
     }

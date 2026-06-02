@@ -3,9 +3,13 @@ package com.project.minlishapp.presentation.auth
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -51,8 +55,8 @@ fun LoginScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(uiState.isAuthenticated, uiState.isProfileComplete) {
-        if (uiState.isAuthenticated) {
+    LaunchedEffect(uiState.isAuthenticated, uiState.isProfileComplete, uiState.isCheckingAuth) {
+        if (uiState.isAuthenticated && !uiState.isCheckingAuth) {
             if (uiState.isProfileComplete == true) {
                 onLoginSuccess()
             } else if (uiState.isProfileComplete == false) {
@@ -61,7 +65,7 @@ fun LoginScreen(
         }
     }
     // Start
-
+//
 //    LoginContent(
 //        uiState = uiState,
 //        onEmailChange = viewModel::onEmailChange,
@@ -95,10 +99,12 @@ fun LoginScreen(
             .background(Color.White)
             .systemBarsPadding()
             .imePadding()
-            .padding(horizontal = 16.dp, vertical = 64.dp)
+            .padding(horizontal = 16.dp, vertical = 0.dp)
+            .verticalScroll(rememberScrollState())
     ) {
+        Spacer(modifier = Modifier.weight(2f))
         LoginHeader()
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.weight(1f))
         LoginForm(
             uiState = uiState,
             onEmailChange = { viewModel.onEmailChange(it) },
@@ -106,13 +112,13 @@ fun LoginScreen(
 //            onEmailChange = onEmailChange,
 //            onPasswordChange = onPasswordChange
         )
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.weight(1f))
         LoginActions(
             uiState = uiState,
             onLoginClick = { viewModel.login() }
 //            onLoginClick = onLoginClick
         )
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.weight(0.8f))
         SocialSection(
             context = context,
             coroutineScope = coroutineScope,
@@ -121,10 +127,11 @@ fun LoginScreen(
 //            onGoogleLoginClick = onGoogleLoginClick,
 //            onShowError = onShowError
         )
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.weight(0.8f))
         LoginFooter(
             onNavigateToRegister = onNavigateToRegister
         )
+        Spacer(modifier = Modifier.weight(1.5f))
     }
 }
 
@@ -438,7 +445,7 @@ private fun LoginFooter(onNavigateToRegister: () -> Unit) {
     }
 }
 //Start
-//@Preview(showBackground = true)
+//@Preview(showBackground = true, showSystemUi = true)
 //@Composable
 //fun LoginScreenEmptyPreview() {
 //    LoginContent(

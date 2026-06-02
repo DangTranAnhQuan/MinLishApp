@@ -83,11 +83,9 @@ fun LevelSelectionScreen(
                         text = "Start Learning",
                         onClick = {
                             viewModel.completeProfileSetup()
-//                            onNavigateNext()
                         },
-//                        onClick = onStartLearning,
-                        isEnabled = uiState.currentLevel.isNotEmpty(),
-                        isLoading = false
+                        isEnabled = uiState.currentLevel.isNotEmpty() && !uiState.isLoading,
+                        isLoading = uiState.isLoading
                     )
                 }
             }

@@ -125,6 +125,7 @@ fun ProfileScreen(
                 TextButton(
                     onClick = {
                         showLogoutDialog = false
+                        viewModel.logout()
                         onLogoutClick()
                     }
                 ) {
@@ -233,13 +234,8 @@ fun ProfileScreen(
                     ProfileActions(
                         uiState = uiState,
                         onSaveChanges = { viewModel.updateUserProfile() },
-                        onLogoutClick = {
-                            viewModel.logout()
-                            showLogoutDialog = true
-                            onLogoutClick()
-                        }
 //                        onSaveChanges = onSaveChanges,
-//                        onLogoutClick = { showLogoutDialog = true }
+                        onLogoutClick = { showLogoutDialog = true }
                     )
                 }
             }

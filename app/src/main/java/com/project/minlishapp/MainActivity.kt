@@ -93,7 +93,11 @@ class MainActivity : ComponentActivity() {
                     }
                 } else {
                     val startRoute = if (uiState.isAuthenticated) {
-                        Screen.Main.route
+                        if (uiState.isProfileComplete == true) {
+                            Screen.Main.route
+                        } else {
+                            Screen.AuthLearningGoal.route
+                        }
                     } else {
                         Screen.Login.route
                     }
