@@ -16,17 +16,22 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.google.firebase.auth.FirebaseAuth
+
+import com.project.minlishapp.domain.usecase.stat.UpdatePracticeStatsUseCase
 
 @HiltViewModel
 class PracticeViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val cardRepository: CardRepository,
     private val authRepository: AuthRepository,
-    private val generateQuizUseCase: GenerateQuizUseCase
+    private val generateQuizUseCase: GenerateQuizUseCase,
+    private val updatePracticeStatsUseCase: UpdatePracticeStatsUseCase
 ) : ViewModel() {
 
     private val deckId: String = savedStateHandle.get<String>("deckId").orEmpty()
@@ -99,6 +104,7 @@ class PracticeViewModel @Inject constructor(
         val question = state.multipleChoiceQuestion ?: return
         if (state.feedback != null) return
 
+        val isCorrect = answer == question.correctAnswer
         _uiState.update {
             it.copy(
                 selectedMultipleChoiceAnswer = answer,
@@ -108,6 +114,12 @@ class PracticeViewModel @Inject constructor(
                     AnswerFeedback.INCORRECT
                 }
             )
+        }
+        
+        viewModelScope.launch {
+            val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
+            val card = state.cards.find { it.id == question.cardId } ?: return@launch
+            updatePracticeStatsUseCase(userId, card, isCorrect)
         }
     }
 
@@ -132,6 +144,7 @@ class PracticeViewModel @Inject constructor(
             return
         }
 
+        val isCorrect = answer.equals(question.correctAnswer, ignoreCase = true)
         _uiState.update {
             it.copy(
                 feedback = if (answer.equals(question.correctAnswer, ignoreCase = true)) {
@@ -141,6 +154,12 @@ class PracticeViewModel @Inject constructor(
                 },
                 answerErrorMessage = null
             )
+        }
+        
+        viewModelScope.launch {
+            val userId = authRepository.currentUser.firstOrNull()?.uid ?: return@launch
+            val card = state.cards.find { it.id == question.cardId } ?: return@launch
+            updatePracticeStatsUseCase(userId, card, isCorrect)
         }
     }
 

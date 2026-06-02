@@ -15,14 +15,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.graphics.Paint
 import com.project.minlishapp.ui.theme.DarkText
 import com.project.minlishapp.ui.theme.SoftWhite
 import com.project.minlishapp.ui.theme.VibrantBlue
@@ -48,7 +51,7 @@ fun RetentionLineChart(
         )
     }
 
-    val maxData = 100f // Percentage
+    val maxData = data.maxOrNull()?.coerceAtLeast(10f) ?: 10f
     val gradientColorStart = VibrantBlue.copy(alpha = 0.2f)
     val gradientColorEnd = VibrantBlue.copy(alpha = 0.0f)
 
@@ -62,11 +65,13 @@ fun RetentionLineChart(
                 val width = size.width
                 val height = size.height
                 val stepX = width / (data.size - 1).coerceAtLeast(1)
+                val yPadding = 16.dp.toPx()
+                val availableHeight = height - yPadding * 2
                 
                 val points = data.mapIndexed { index, value ->
                     Offset(
                         x = index * stepX,
-                        y = height - ((value / maxData) * height)
+                        y = height - yPadding - ((value / maxData) * availableHeight)
                     )
                 }
 
@@ -109,11 +114,51 @@ fun RetentionLineChart(
                     drawPath(path = shadowPath, color = VibrantBlue.copy(alpha = 0.15f), style = shadowStroke, alpha = currentAlpha)
                     drawPath(path = linePath, color = VibrantBlue, style = lineStroke, alpha = currentAlpha)
                     
-                    points.forEach { point ->
+                    points.forEachIndexed { index, point ->
                         drawCircle(color = SoftWhite, radius = 5.dp.toPx(), center = point, alpha = currentAlpha)
                         drawCircle(color = VibrantBlue, radius = 5.dp.toPx(), center = point, style = dotStroke, alpha = currentAlpha)
+                        
+                        // Draw value above the point
+                        val valueStr = data[index].toInt().toString()
+                        val textPaint = Paint().apply {
+                            color = android.graphics.Color.GRAY
+                            textSize = 12.sp.toPx()
+                            textAlign = Paint.Align.CENTER
+                            alpha = (currentAlpha * 255).toInt()
+                        }
+                        drawContext.canvas.nativeCanvas.drawText(
+                            valueStr,
+                            point.x,
+                            point.y - 12.dp.toPx(),
+                            textPaint
+                        )
                     }
                 }
             }
     )
+    
+    val daysOfWeek = remember {
+        val format = java.text.SimpleDateFormat("EEE\ndd", java.util.Locale.getDefault())
+        (6 downTo 0).map { i ->
+            val cal = java.util.Calendar.getInstance()
+            cal.add(java.util.Calendar.DAY_OF_YEAR, -i)
+            format.format(cal.time)
+        }
+    }
+    
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+    ) {
+        daysOfWeek.forEachIndexed { index, day ->
+            Text(
+                text = day,
+                fontSize = 12.sp,
+                color = if (index == daysOfWeek.size - 1) Color(0xFFFF9800) else com.project.minlishapp.ui.theme.GrayText,
+                modifier = Modifier.weight(1f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                lineHeight = 16.sp
+            )
+        }
+    }
 }
