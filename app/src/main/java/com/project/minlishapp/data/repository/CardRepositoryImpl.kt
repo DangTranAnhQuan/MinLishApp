@@ -36,8 +36,6 @@ class CardRepositoryImpl @Inject constructor(
         awaitClose { listener.remove() }
     }
 
-<<<<<<< Updated upstream
-=======
     override fun getCardsByUser(userId: String): Flow<List<Card>> = callbackFlow {
         val listener = firestore.collection("cards")
             .whereEqualTo("userId", userId)
@@ -69,7 +67,6 @@ class CardRepositoryImpl @Inject constructor(
         awaitClose { listener.remove() }
     }
 
->>>>>>> Stashed changes
     override fun getDueCards(userId: String, currentTimeMs: Long): Flow<List<Card>> = callbackFlow {
         val listener = firestore.collection("cards")
             .whereEqualTo("userId", userId)

@@ -70,6 +70,19 @@ class VocabularyViewModel @Inject constructor(
         _uiState.update { it.copy(searchQuery = query) }
     }
 
+    fun loadCards(deckId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            cardRepository.getCardsInDeck(deckId)
+                .catch { e ->
+                    _uiState.update { it.copy(isLoading = false, errorMessage = e.message) }
+                }
+                .collect { cards ->
+                    _uiState.update { it.copy(cards = cards, isLoading = false) }
+                }
+        }
+    }
+
     // Deck Operations
     fun addDeck(title: String, description: String, tags: List<String>) {
         viewModelScope.launch {
@@ -119,6 +132,9 @@ class VocabularyViewModel @Inject constructor(
                     meaning = form.meaning,
                     definition = form.definition,
                     example = form.example,
+                    collocation = form.collocation,
+                    relatedWords = form.relatedWords,
+                    note = form.note,
                     imageUrl = form.imageUrl,
                     audioUrl = form.audioUrl,
                     tags = form.tags.split(",").map { it.trim() }.filter { it.isNotEmpty() },
@@ -155,9 +171,9 @@ class VocabularyViewModel @Inject constructor(
                             // Assuming CSV format: word,phonetic,meaning,definition,example,imageUrl,audioUrl,tags
                             var line: String? = reader.readLine()
                             while (line != null) {
-                                // Regex to handle CSV with quotes: splits by comma only if it's not inside quotes
-                                val parts = line.split(Regex(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"))
-                                    .map { it.trim().removeSurrounding("\"") }
+                            // Basic CSV split to avoid potential KSP/Compiler issues with complex regex
+                            val parts = line.split(",")
+                                .map { it.trim().removeSurrounding("\"") }
 
                                 if (parts.size >= 3) {
                                     val card = Card(
@@ -183,9 +199,10 @@ class VocabularyViewModel @Inject constructor(
                 }
 
                 val total = cards.size
-                cards.chunked(50).forEachIndexed { index, chunk ->
+                var processedCount = 0
+                for ((index, chunk) in cards.chunked(50).withIndex()) {
                     cardRepository.insertCards(chunk)
-                    val processedCount = (index + 1) * chunk.size
+                    processedCount += chunk.size
                     val progress = processedCount.toFloat() / total
                     _uiState.update { 
                         it.copy(
@@ -291,6 +308,9 @@ data class CardFormState(
     val meaning: String = "",
     val definition: String = "",
     val example: String = "",
+    val collocation: String = "",
+    val relatedWords: String = "",
+    val note: String = "",
     val imageUrl: String = "",
     val audioUrl: String = "",
     val tags: String = ""
