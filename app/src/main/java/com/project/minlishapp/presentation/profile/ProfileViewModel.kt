@@ -78,7 +78,28 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun onProfilePictureChange(url: String) {
+        val currentUser = _uiState.value.user
+        if (currentUser == null) {
+            _uiState.update { it.copy(errorMessage = "Không tìm thấy người dùng hiện tại") }
+            return
+        }
+
         _uiState.update { it.copy(profilePictureUrl = url, isSuccess = false, errorMessage = null) }
+
+        viewModelScope.launch {
+            try {
+                val updatedUser = currentUser.copy(
+                    profilePictureUrl = url
+                )
+                userRepository.saveUser(updatedUser)
+
+                _uiState.update { it.copy(user = updatedUser, isSuccess = true) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(errorMessage = e.localizedMessage ?: "Tự động lưu ảnh đại diện thất bại")
+                }
+            }
+        }
     }
 
     fun updateUserProfile() {

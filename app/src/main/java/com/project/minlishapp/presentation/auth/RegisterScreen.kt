@@ -248,6 +248,8 @@ private fun RegisterForm(
                     onValueChange = onDisplayNameChange,
                     placeholder = "Enter your full name",
                     leadingIconRes = R.drawable.ic_fullname,
+                    isError = uiState.displayNameError != null,
+                    errorMessage = uiState.displayNameError,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
                 )
             }
@@ -308,7 +310,7 @@ private fun RegisterForm(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
                 )
                 Text(
-                    text = "Must be at least 8 characters long.",
+                    text = "Must be at least 6 characters long.",
                     color = Color(0xff64748b),
                     lineHeight = 1.5.em,
                     style = TextStyle(fontSize = 12.sp),

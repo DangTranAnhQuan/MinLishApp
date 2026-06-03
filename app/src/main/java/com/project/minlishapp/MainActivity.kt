@@ -26,6 +26,7 @@ import com.project.minlishapp.presentation.auth.AuthViewModel
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,7 +57,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         requestNotificationPermission()
         scheduleDailyReminder()
 
@@ -74,20 +75,18 @@ class MainActivity : ComponentActivity() {
                             .background(Color.White),
                         contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically,
+                        Box(
+                            contentAlignment = Alignment.Center,
                             modifier = Modifier
                                 .size(64.dp)
-                                .clip(shape = RoundedCornerShape(24.dp))
-                                .background(color = Color(0xff1a73e8))
                                 .shadow(elevation = 14.dp, shape = RoundedCornerShape(24.dp))
+                                .clip(shape = RoundedCornerShape(24.dp))
+                                .background(color = Color(0xFF1AE1E8))
                         ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_minlish_logo),
-                                contentDescription = "Logo",
-                                colorFilter = ColorFilter.tint(Color.White),
-                                modifier = Modifier.size(30.dp)
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 3.dp,
+                                modifier = Modifier.size(32.dp)
                             )
                         }
                     }
