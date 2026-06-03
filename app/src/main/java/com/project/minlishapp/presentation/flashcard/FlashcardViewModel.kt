@@ -45,15 +45,21 @@ class FlashcardViewModel @Inject constructor(
     private val deckId: String = savedStateHandle.get<String>("deckId").orEmpty()
     private val isSpacedRepetitionReview =
         deckId == Screen.FlashcardLearning.SPACED_REPETITION_DECK_ID
+    private val requestedReviewMode: String =
+        savedStateHandle.get<String>("reviewMode").orEmpty()
+    private val isOfficialReview =
+        isSpacedRepetitionReview || requestedReviewMode != Screen.FlashcardLearning.FREE_REVIEW_MODE
     private val sessionId = UUID.randomUUID().toString()
     private val reviewedCardIds = mutableSetOf<String>()
+    private var deckSessionCardOrderIds: List<String> = emptyList()
     private var dueCardsJob: Job? = null
     private var pendingSubmission: PendingFlashcardSubmission? = null
 
     private val _uiState = MutableStateFlow(
         FlashcardUiState(
             deckId = deckId,
-            isSpacedRepetitionReview = isSpacedRepetitionReview
+            isSpacedRepetitionReview = isSpacedRepetitionReview,
+            isOfficialReview = isOfficialReview
         )
     )
     val uiState: StateFlow<FlashcardUiState> = _uiState.asStateFlow()
@@ -76,6 +82,7 @@ class FlashcardViewModel @Inject constructor(
                     dueCardsJob?.cancel()
                     if (_uiState.value.userId != userId) {
                         pendingSubmission = null
+                        deckSessionCardOrderIds = emptyList()
                     }
                     if (userId.isNullOrBlank()) {
                         _uiState.value = _uiState.value.copy(
@@ -141,7 +148,8 @@ class FlashcardViewModel @Inject constructor(
             runCatching {
                 cardRepository.getCardsInDeck(deckId).collectLatest { cards ->
                     val usableCards = filterUsableFlashcardsUseCase(cards)
-                    val remainingCards = usableCards.filterNot { it.id in reviewedCardIds }
+                    val orderedCards = orderedDeckCardsForSession(usableCards)
+                    val remainingCards = orderedCards.filterNot { it.id in reviewedCardIds }
                     val currentIndex = if (remainingCards.isEmpty()) {
                         0
                     } else {
@@ -196,6 +204,11 @@ class FlashcardViewModel @Inject constructor(
         if (_uiState.value.isSubmitting) return
 
         val currentCard = currentCard() ?: return
+        if (!isOfficialReview) {
+            completeFreePracticeReview(currentCard, grade)
+            return
+        }
+
         val userId = _uiState.value.userId
         if (userId.isNullOrBlank()) {
             _uiState.value = _uiState.value.copy(
@@ -295,6 +308,31 @@ class FlashcardViewModel @Inject constructor(
         )
     }
 
+    private fun completeFreePracticeReview(currentCard: Card, grade: ReviewGrade) {
+        pendingSubmission = null
+        reviewedCardIds += currentCard.id
+        val currentState = _uiState.value
+        val remainingCards = currentState.cards.filterNot { it.id == currentCard.id }
+        val nextIndex = currentState.currentCardIndex
+            .coerceAtMost((remainingCards.size - 1).coerceAtLeast(0))
+        _uiState.value = currentState.copy(
+            cards = remainingCards,
+            currentCardIndex = nextIndex,
+            isFlipped = false,
+            isSubmitting = false,
+            isSessionCompleted = remainingCards.isEmpty(),
+            completedReviewCount = reviewedCardIds.size,
+            sessionTotalCount = maxOf(currentState.sessionTotalCount, reviewedCardIds.size),
+            statusMessage = when (grade) {
+                ReviewGrade.AGAIN -> "Luyện tự do: đánh dấu cần xem lại, lịch SM-2 không đổi."
+                ReviewGrade.HARD -> "Luyện tự do: ghi nhận mức khó, lịch SM-2 không đổi."
+                ReviewGrade.GOOD -> "Luyện tự do: ghi nhận mức tốt, lịch SM-2 không đổi."
+                ReviewGrade.EASY -> "Luyện tự do: ghi nhận mức dễ, lịch SM-2 không đổi."
+            },
+            errorMessage = null
+        )
+    }
+
     fun clearStatusMessage() {
         _uiState.value = _uiState.value.copy(statusMessage = null)
     }
@@ -332,6 +370,18 @@ class FlashcardViewModel @Inject constructor(
     private fun currentCard(): Card? {
         return _uiState.value.cards.getOrNull(_uiState.value.currentCardIndex)
     }
+
+    private fun orderedDeckCardsForSession(cards: List<Card>): List<Card> {
+        val cardsById = cards.associateBy(Card::id)
+        val currentIds = cards.map(Card::id).toSet()
+        val keptOrderIds = deckSessionCardOrderIds.filter { it in currentIds }
+        val newCardIds = currentIds
+            .filterNot { it in keptOrderIds }
+            .shuffled()
+
+        deckSessionCardOrderIds = keptOrderIds + newCardIds
+        return deckSessionCardOrderIds.mapNotNull(cardsById::get)
+    }
 }
 
 private data class PendingFlashcardSubmission(
@@ -343,6 +393,7 @@ private data class PendingFlashcardSubmission(
 data class FlashcardUiState(
     val deckId: String = "",
     val isSpacedRepetitionReview: Boolean = false,
+    val isOfficialReview: Boolean = true,
     val userId: String? = null,
     val cards: List<Card> = emptyList(),
     val currentCardIndex: Int = 0,

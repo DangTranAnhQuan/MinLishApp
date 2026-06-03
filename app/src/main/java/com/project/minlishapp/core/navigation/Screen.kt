@@ -26,11 +26,17 @@ sealed class Screen(val route: String, val title: String? = null) {
         fun createRoute(deckId: String) = "add_card/$deckId"
     }
 
-    object FlashcardLearning : Screen("flashcard_learning/{deckId}") {
-        fun createRoute(deckId: String) = "flashcard_learning/$deckId"
+    object FlashcardLearning : Screen("flashcard_learning/{deckId}?reviewMode={reviewMode}") {
+        fun createRoute(
+            deckId: String,
+            reviewMode: String = OFFICIAL_REVIEW_MODE
+        ) = "flashcard_learning/$deckId?reviewMode=$reviewMode"
+
         fun createSpacedRepetitionRoute() = createRoute(SPACED_REPETITION_DECK_ID)
 
         const val SPACED_REPETITION_DECK_ID = "__spaced_repetition__"
+        const val OFFICIAL_REVIEW_MODE = "official"
+        const val FREE_REVIEW_MODE = "free"
     }
 
     object Practice : Screen("practice/{deckId}") {

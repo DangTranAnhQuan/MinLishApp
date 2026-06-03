@@ -166,6 +166,40 @@ class VocabularyViewModel @Inject constructor(
         }
     }
 
+    fun updateCard(card: Card) {
+        if (card.word.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Word is required.") }
+            return
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                cardRepository.updateCard(card)
+                _uiState.update { it.copy(errorMessage = null) }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(errorMessage = throwable.localizedMessage ?: "Unable to update card.")
+                }
+            }
+        }
+    }
+
+    fun deleteCard(card: Card) {
+        viewModelScope.launch {
+            runCatching {
+                cardRepository.deleteCard(card.id)
+                deckRepository.getDeck(card.deckId).first()?.let { deck ->
+                    deckRepository.updateDeck(deck.copy(wordCount = (deck.wordCount - 1).coerceAtLeast(0)))
+                }
+                _uiState.update { it.copy(errorMessage = null) }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(errorMessage = throwable.localizedMessage ?: "Unable to delete card.")
+                }
+            }
+        }
+    }
+
     // CSV Import Logic
     fun importCsv(context: Context, uri: Uri, deckId: String) {
         viewModelScope.launch {

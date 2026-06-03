@@ -137,6 +137,11 @@ class PracticeViewModel @Inject constructor(
             refreshSetupDetails(
                 it.copy(
                     sessionMode = sessionMode,
+                    reviewMode = if (sessionMode == PracticeSessionMode.SPACED_REPETITION) {
+                        PracticeReviewMode.OFFICIAL
+                    } else {
+                        it.reviewMode
+                    },
                     setupMessage = null
                 )
             )
@@ -149,6 +154,21 @@ class PracticeViewModel @Inject constructor(
             refreshSetupDetails(
                 it.copy(
                     quizType = quizType,
+                    setupMessage = null
+                )
+            )
+        }
+    }
+
+    fun selectReviewMode(reviewMode: PracticeReviewMode) {
+        val state = _uiState.value
+        if (state.phase != PracticePhase.SETUP) return
+        if (state.sessionMode == PracticeSessionMode.SPACED_REPETITION) return
+
+        _uiState.update {
+            refreshSetupDetails(
+                it.copy(
+                    reviewMode = reviewMode,
                     setupMessage = null
                 )
             )
@@ -282,9 +302,25 @@ class PracticeViewModel @Inject constructor(
             QuizType.MULTIPLE_CHOICE -> state.multipleChoiceQuestion?.cardId
             QuizType.FILL_IN_THE_BLANK -> state.fillInBlankQuestion?.cardId
         } ?: return
+        val effectiveGrade = grade.constrainedBy(state.feedback)
 
-        _uiState.update { it.copy(selectedReviewGrade = grade) }
-        savePracticeAttempt(cardId, state.feedback, grade)
+        if (state.isOfficialReview) {
+            _uiState.update { it.copy(selectedReviewGrade = effectiveGrade) }
+            savePracticeAttempt(cardId, state.feedback, effectiveGrade)
+        } else {
+            pendingSubmission = null
+            _uiState.update {
+                it.copy(
+                    selectedReviewGrade = effectiveGrade,
+                    isSavingResult = false,
+                    isResultSaved = true,
+                    resultSaveErrorMessage = null,
+                    lastReviewIntervalDays = null,
+                    lastEaseFactor = null,
+                    lastNextReviewTime = null
+                )
+            }
+        }
     }
 
     fun restartSession() {
@@ -406,7 +442,7 @@ class PracticeViewModel @Inject constructor(
             nextReviewTime = reviewResult.reviewedCard.nextReviewTime,
             isDueReview = currentCard.sm2Interval > 0 &&
                 currentCard.nextReviewTime.time <= answeredAt.time,
-            isFirstTimeLearned = currentCard.sm2Interval == 0 && isCorrect,
+            isFirstTimeLearned = currentCard.sm2Interval == 0 && isCorrect && grade.isLearned,
             answeredAt = answeredAt
         )
         val submission = PendingPracticeSubmission(
@@ -559,6 +595,17 @@ class PracticeViewModel @Inject constructor(
         return map { card -> if (card.id == updatedCard.id) updatedCard else card }
     }
 
+    private fun ReviewGrade.constrainedBy(feedback: AnswerFeedback): ReviewGrade {
+        return if (feedback == AnswerFeedback.INCORRECT && qualityScore > ReviewGrade.HARD.qualityScore) {
+            ReviewGrade.HARD
+        } else {
+            this
+        }
+    }
+
+    private val ReviewGrade.isLearned: Boolean
+        get() = qualityScore >= ReviewGrade.GOOD.qualityScore
+
     private companion object {
         const val DEBUG_DECK_ID = "debug_deck"
         const val REQUIRED_MULTIPLE_CHOICE_MEANINGS = 4
@@ -596,6 +643,11 @@ enum class QuizType {
     }
 }
 
+enum class PracticeReviewMode(val routeValue: String) {
+    OFFICIAL("official"),
+    FREE_PRACTICE("free")
+}
+
 enum class AnswerFeedback {
     CORRECT,
     INCORRECT
@@ -608,6 +660,7 @@ data class PracticeUiState(
     val selectedDeckId: String = "",
     val practiceCards: List<Card> = emptyList(),
     val sessionMode: PracticeSessionMode = PracticeSessionMode.SPACED_REPETITION,
+    val reviewMode: PracticeReviewMode = PracticeReviewMode.OFFICIAL,
     val quizType: QuizType = QuizType.FLASHCARD,
     val phase: PracticePhase = PracticePhase.SETUP,
     val sessionId: String = "",
@@ -649,6 +702,16 @@ data class PracticeUiState(
     val canStartSession: Boolean
         get() = sessionQuestionCount > 0 &&
             (sessionMode == PracticeSessionMode.SPACED_REPETITION || selectedDeck != null)
+
+    val isOfficialReview: Boolean
+        get() = sessionMode == PracticeSessionMode.SPACED_REPETITION ||
+            reviewMode == PracticeReviewMode.OFFICIAL
+
+    val allowedReviewGrades: Set<ReviewGrade>
+        get() = when (feedback) {
+            AnswerFeedback.INCORRECT -> setOf(ReviewGrade.AGAIN, ReviewGrade.HARD)
+            else -> ReviewGrade.entries.toSet()
+        }
 
     val completedAnswerCount: Int
         get() = correctAnswerCount + incorrectAnswerCount

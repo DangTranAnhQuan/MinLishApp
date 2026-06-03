@@ -141,6 +141,7 @@ fun FlashcardScreen(
                 uiState.isSessionCompleted -> {
                     FlashcardCompletionState(
                         isSpacedRepetitionReview = uiState.isSpacedRepetitionReview,
+                        isOfficialReview = uiState.isOfficialReview,
                         reviewedCount = uiState.completedReviewCount,
                         nextReviewTime = uiState.sessionNextReviewTime,
                         onDone = onBack
@@ -258,6 +259,17 @@ fun FlashcardScreen(
                         LinearProgressIndicatorWithLabel(
                             progress = (uiState.completedReviewCount + 1).toFloat() /
                                 uiState.sessionTotalCount.coerceAtLeast(1).toFloat()
+                        )
+                        Text(
+                            text = if (uiState.isOfficialReview) {
+                                "Luyện chính thức: các mức nhớ sẽ cập nhật lịch ôn SM-2."
+                            } else {
+                                "Luyện tự do: các mức nhớ không đổi lịch ôn SM-2."
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = GrayText,
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center
                         )
 
                         if (!uiState.isFlipped) {
@@ -590,6 +602,7 @@ private fun EmptyState(title: String, message: String) {
 @Composable
 private fun FlashcardCompletionState(
     isSpacedRepetitionReview: Boolean,
+    isOfficialReview: Boolean,
     reviewedCount: Int,
     nextReviewTime: Date?,
     onDone: () -> Unit
@@ -611,6 +624,8 @@ private fun FlashcardCompletionState(
         Text(
             text = if (isSpacedRepetitionReview) {
                 "Đã ôn xong các từ đến hạn"
+            } else if (!isOfficialReview) {
+                "Đã luyện tự do xong bộ từ"
             } else {
                 "Đã ôn xong bộ từ"
             },
@@ -628,9 +643,13 @@ private fun FlashcardCompletionState(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = nextReviewTime?.let {
-                "Các từ vừa ôn sẽ đến hạn sớm nhất lúc ${formatReviewDateTime(it)}."
-            } ?: "Chưa có lịch ôn tiếp theo.",
+            text = if (!isOfficialReview) {
+                "Phiên này không thay đổi lịch ôn SM-2."
+            } else {
+                nextReviewTime?.let {
+                    "Các từ vừa ôn sẽ đến hạn sớm nhất lúc ${formatReviewDateTime(it)}."
+                } ?: "Chưa có lịch ôn tiếp theo."
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = GrayText,
             textAlign = TextAlign.Center

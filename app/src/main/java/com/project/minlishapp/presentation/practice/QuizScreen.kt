@@ -76,7 +76,7 @@ private val IncorrectContainerColor = Color(0xfffee2e2)
 fun QuizScreen(
     onBack: () -> Unit,
     onNavigateToDashboard: () -> Unit = {},
-    onStartFlashcardReview: (String?) -> Unit = {},
+    onStartFlashcardReview: (String?, PracticeReviewMode) -> Unit = { _, _ -> },
     viewModel: PracticeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -98,6 +98,7 @@ fun QuizScreen(
         onSessionModeSelected = viewModel::selectSessionMode,
         onDeckSelected = viewModel::selectDeck,
         onQuizTypeSelected = viewModel::selectQuizType,
+        onReviewModeSelected = viewModel::selectReviewMode,
         onStartSession = viewModel::startSession,
         onMultipleChoiceAnswerSelected = viewModel::selectMultipleChoiceAnswer,
         onFillInBlankAnswerChanged = viewModel::onFillInBlankAnswerChange,
@@ -115,10 +116,11 @@ private fun PracticeContent(
     uiState: PracticeUiState,
     onBack: () -> Unit,
     onNavigateToDashboard: () -> Unit,
-    onStartFlashcardReview: (String?) -> Unit,
+    onStartFlashcardReview: (String?, PracticeReviewMode) -> Unit,
     onSessionModeSelected: (PracticeSessionMode) -> Unit,
     onDeckSelected: (String) -> Unit,
     onQuizTypeSelected: (QuizType) -> Unit,
+    onReviewModeSelected: (PracticeReviewMode) -> Unit,
     onStartSession: () -> Unit,
     onMultipleChoiceAnswerSelected: (String) -> Unit,
     onFillInBlankAnswerChanged: (String) -> Unit,
@@ -161,6 +163,7 @@ private fun PracticeContent(
                         onSessionModeSelected = onSessionModeSelected,
                         onDeckSelected = onDeckSelected,
                         onQuizTypeSelected = onQuizTypeSelected,
+                        onReviewModeSelected = onReviewModeSelected,
                         onStartSession = onStartSession
                     )
                 }
@@ -193,10 +196,11 @@ private fun PracticeContent(
 @Composable
 private fun PracticeSetup(
     uiState: PracticeUiState,
-    onStartFlashcardReview: (String?) -> Unit,
+    onStartFlashcardReview: (String?, PracticeReviewMode) -> Unit,
     onSessionModeSelected: (PracticeSessionMode) -> Unit,
     onDeckSelected: (String) -> Unit,
     onQuizTypeSelected: (QuizType) -> Unit,
+    onReviewModeSelected: (PracticeReviewMode) -> Unit,
     onStartSession: () -> Unit
 ) {
     Column(
@@ -224,6 +228,10 @@ private fun PracticeSetup(
                     onDeckSelected = onDeckSelected
                 )
             }
+            ReviewModeSelector(
+                selectedReviewMode = uiState.reviewMode,
+                onReviewModeSelected = onReviewModeSelected
+            )
         }
 
         QuizTypeSelector(
@@ -253,7 +261,8 @@ private fun PracticeSetup(
                     onStartFlashcardReview(
                         uiState.selectedDeckId.takeIf {
                             uiState.sessionMode == PracticeSessionMode.DECK_PRACTICE
-                        }
+                        },
+                        uiState.reviewMode
                     )
                 }
             )
@@ -328,7 +337,12 @@ private fun ActivePracticeSession(
                 uiState.resultSaveErrorMessage?.let { message ->
                     MessageCard(title = "Chưa thể lưu kết quả", message = message)
                 }
-                Sm2GradeActions(onReviewGradeSelected = onReviewGradeSelected)
+                Sm2GradeActions(
+                    feedback = feedback,
+                    isOfficialReview = uiState.isOfficialReview,
+                    allowedGrades = uiState.allowedReviewGrades,
+                    onReviewGradeSelected = onReviewGradeSelected
+                )
             } else {
                 SaveResultStatus(
                     uiState = uiState,
@@ -512,6 +526,65 @@ private fun SessionModeButton(
 }
 
 @Composable
+private fun ReviewModeSelector(
+    selectedReviewMode: PracticeReviewMode,
+    onReviewModeSelected: (PracticeReviewMode) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Cách ghi nhận kết quả",
+            color = DarkText,
+            fontWeight = FontWeight.Bold
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ReviewModeButton(
+                modifier = Modifier.weight(1f),
+                title = "Chính thức",
+                description = "Cập nhật lịch SM-2.",
+                isSelected = selectedReviewMode == PracticeReviewMode.OFFICIAL,
+                onClick = { onReviewModeSelected(PracticeReviewMode.OFFICIAL) }
+            )
+            ReviewModeButton(
+                modifier = Modifier.weight(1f),
+                title = "Tự do",
+                description = "Không đổi lịch ôn.",
+                isSelected = selectedReviewMode == PracticeReviewMode.FREE_PRACTICE,
+                onClick = { onReviewModeSelected(PracticeReviewMode.FREE_PRACTICE) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReviewModeButton(
+    modifier: Modifier = Modifier,
+    title: String,
+    description: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, if (isSelected) PrimaryBlue else LightBorder),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = if (isSelected) Color(0xffeff6ff) else Color.White,
+            contentColor = DarkText
+        ),
+        contentPadding = PaddingValues(10.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(text = title, fontWeight = FontWeight.Bold)
+            Text(text = description, color = GrayText, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
 private fun QuizTypeSelector(
     selectedQuizType: QuizType,
     onQuizTypeSelected: (QuizType) -> Unit
@@ -610,6 +683,15 @@ private fun DailyLearningPlanCard(uiState: PracticeUiState) {
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(text = "Hôm nay", color = DarkText, fontWeight = FontWeight.Bold)
+            Text(
+                text = if (uiState.isOfficialReview) {
+                    "Luyện chính thức: kết quả sẽ cập nhật lịch ôn SM-2."
+                } else {
+                    "Luyện tự do: kết quả không đổi lịch ôn SM-2."
+                },
+                color = GrayText,
+                style = MaterialTheme.typography.bodySmall
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -698,6 +780,9 @@ private fun LearningPlanMetric(
 
 @Composable
 private fun Sm2GradeActions(
+    feedback: AnswerFeedback,
+    isOfficialReview: Boolean,
+    allowedGrades: Set<ReviewGrade>,
     onReviewGradeSelected: (ReviewGrade) -> Unit
 ) {
     Surface(
@@ -711,10 +796,21 @@ private fun Sm2GradeActions(
         ) {
             Text(text = "Bạn nhớ từ này thế nào?", color = DarkText, fontWeight = FontWeight.Bold)
             Text(
-                text = "Chọn một mức để lên lịch ôn tiếp theo.",
+                text = if (isOfficialReview) {
+                    "Chế độ chính thức: mức bạn chọn sẽ cập nhật lịch ôn SM-2."
+                } else {
+                    "Luyện tự do: mức bạn chọn chỉ dùng trong phiên này, không đổi lịch SM-2."
+                },
                 color = GrayText,
                 style = MaterialTheme.typography.bodySmall
             )
+            if (feedback == AnswerFeedback.INCORRECT) {
+                Text(
+                    text = "Vì câu trả lời sai, Good/Easy bị khóa để tránh đẩy lịch ôn quá xa.",
+                    color = IncorrectColor,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -722,11 +818,13 @@ private fun Sm2GradeActions(
                 Sm2GradeButton(
                     modifier = Modifier.weight(1f),
                     text = "Again",
+                    enabled = ReviewGrade.AGAIN in allowedGrades,
                     onClick = { onReviewGradeSelected(ReviewGrade.AGAIN) }
                 )
                 Sm2GradeButton(
                     modifier = Modifier.weight(1f),
                     text = "Hard",
+                    enabled = ReviewGrade.HARD in allowedGrades,
                     onClick = { onReviewGradeSelected(ReviewGrade.HARD) }
                 )
             }
@@ -737,11 +835,13 @@ private fun Sm2GradeActions(
                 Sm2GradeButton(
                     modifier = Modifier.weight(1f),
                     text = "Good",
+                    enabled = ReviewGrade.GOOD in allowedGrades,
                     onClick = { onReviewGradeSelected(ReviewGrade.GOOD) }
                 )
                 Sm2GradeButton(
                     modifier = Modifier.weight(1f),
                     text = "Easy",
+                    enabled = ReviewGrade.EASY in allowedGrades,
                     onClick = { onReviewGradeSelected(ReviewGrade.EASY) }
                 )
             }
@@ -753,15 +853,17 @@ private fun Sm2GradeActions(
 private fun Sm2GradeButton(
     modifier: Modifier = Modifier,
     text: String,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     OutlinedButton(
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 9.dp)
     ) {
-        Text(text = text, color = PrimaryBlue, fontWeight = FontWeight.SemiBold)
+        Text(text = text, color = if (enabled) PrimaryBlue else GrayText, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -909,6 +1011,21 @@ private fun SaveResultStatus(
         uiState.resultSaveErrorMessage != null -> {
             MessageCard(title = "Chưa lưu được kết quả", message = uiState.resultSaveErrorMessage)
             PrimaryButton(text = "Thử lưu lại", onClick = onRetrySaveResult)
+        }
+
+        uiState.isResultSaved && !uiState.isOfficialReview -> {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Đã ghi nhận trong phiên luyện tự do.",
+                    color = CorrectColor,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Lịch ôn SM-2 và thống kê học tập không thay đổi.",
+                    color = GrayText,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
         }
 
         uiState.isResultSaved -> {
@@ -1084,10 +1201,11 @@ private fun PracticeSetupPreview() {
             uiState = previewSetupState,
             onBack = {},
             onNavigateToDashboard = {},
-            onStartFlashcardReview = {},
+            onStartFlashcardReview = { _, _ -> },
             onSessionModeSelected = {},
             onDeckSelected = {},
             onQuizTypeSelected = {},
+            onReviewModeSelected = {},
             onStartSession = {},
             onMultipleChoiceAnswerSelected = {},
             onFillInBlankAnswerChanged = {},
@@ -1119,10 +1237,11 @@ private fun PracticeQuestionPreview() {
             ),
             onBack = {},
             onNavigateToDashboard = {},
-            onStartFlashcardReview = {},
+            onStartFlashcardReview = { _, _ -> },
             onSessionModeSelected = {},
             onDeckSelected = {},
             onQuizTypeSelected = {},
+            onReviewModeSelected = {},
             onStartSession = {},
             onMultipleChoiceAnswerSelected = {},
             onFillInBlankAnswerChanged = {},

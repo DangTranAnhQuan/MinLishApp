@@ -113,7 +113,13 @@ fun NavGraph(
 
         composable(
             route = Screen.FlashcardLearning.route,
-            arguments = listOf(navArgument("deckId") { type = NavType.StringType })
+            arguments = listOf(
+                navArgument("deckId") { type = NavType.StringType },
+                navArgument("reviewMode") {
+                    type = NavType.StringType
+                    defaultValue = Screen.FlashcardLearning.OFFICIAL_REVIEW_MODE
+                }
+            )
         ) {
             FlashcardScreen(
                 onBack = { navController.navigateBackOrToRegister() },
@@ -128,9 +134,9 @@ fun NavGraph(
             QuizScreen(
                 onBack = { navController.navigateBackOrToRegister() },
                 onNavigateToDashboard = { navController.navigate(Screen.Main.route) },
-                onStartFlashcardReview = { deckId ->
+                onStartFlashcardReview = { deckId, reviewMode ->
                     navController.navigate(
-                        deckId?.let(Screen.FlashcardLearning::createRoute)
+                        deckId?.let { Screen.FlashcardLearning.createRoute(it, reviewMode.routeValue) }
                             ?: Screen.FlashcardLearning.createSpacedRepetitionRoute()
                     )
                 },
@@ -187,9 +193,9 @@ fun MainNavGraph(
                         popUpTo(Screen.MainDashboard.route)
                     }
                 },
-                onStartFlashcardReview = { deckId ->
+                onStartFlashcardReview = { deckId, reviewMode ->
                     rootNavController.navigate(
-                        deckId?.let(Screen.FlashcardLearning::createRoute)
+                        deckId?.let { Screen.FlashcardLearning.createRoute(it, reviewMode.routeValue) }
                             ?: Screen.FlashcardLearning.createSpacedRepetitionRoute()
                     )
                 }
