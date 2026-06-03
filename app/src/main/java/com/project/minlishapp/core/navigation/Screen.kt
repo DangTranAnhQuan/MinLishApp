@@ -1,7 +1,6 @@
 package com.project.minlishapp.core.navigation
 
 sealed class Screen(val route: String, val title: String? = null) {
-    // --- Authentication Screens ---
     object Login : Screen("login")
     object Register : Screen("register")
     object AuthLogin : Screen("auth_login")
@@ -10,7 +9,6 @@ sealed class Screen(val route: String, val title: String? = null) {
     object AuthLevelSelection : Screen("auth_level_selection")
     object AuthProfileSetup : Screen("auth_profile_setup")
 
-    // --- Dashboard & Main Screens ---
     object Main : Screen("main")
     object Dashboard : Screen("dashboard")
     object MainDashboard : Screen("main_dashboard", "Home")
@@ -18,11 +16,14 @@ sealed class Screen(val route: String, val title: String? = null) {
     object MainPractice : Screen("main_practice", "Practice")
     object MainProfile : Screen("main_profile", "Profile")
 
-    // --- Learning & Deck Modules Screens ---
     object DeckList : Screen("deck_list")
 
     object CardList : Screen("card_list/{deckId}") {
         fun createRoute(deckId: String) = "card_list/$deckId"
+    }
+
+    object AddCard : Screen("add_card/{deckId}") {
+        fun createRoute(deckId: String) = "add_card/$deckId"
     }
 
     object FlashcardLearning : Screen("flashcard_learning/{deckId}") {

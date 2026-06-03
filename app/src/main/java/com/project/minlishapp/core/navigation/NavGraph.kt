@@ -1,10 +1,6 @@
 package com.project.minlishapp.core.navigation
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
@@ -14,11 +10,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.project.minlishapp.presentation.auth.LoginScreen
 import com.project.minlishapp.presentation.auth.RegisterScreen
+import com.project.minlishapp.presentation.dashboard.DashboardScreen
 import com.project.minlishapp.presentation.flashcard.FlashcardScreen
 import com.project.minlishapp.presentation.practice.QuizScreen
-import com.project.minlishapp.presentation.dashboard.DashboardScreen
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.project.minlishapp.presentation.vocabulary.components.CardListScreen
+import com.project.minlishapp.presentation.vocabulary.components.CardManagementScreen
+import com.project.minlishapp.presentation.vocabulary.components.DeckManagementScreen
 
 private const val DEBUG_START_ON_PRACTICE = true
 
@@ -75,20 +72,42 @@ fun NavGraph(
         }
 
         composable(Screen.DeckList.route) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = "Deck List Screen")
-            }
+            DeckManagementScreen(
+                onImportExportClick = { },
+                onDeckClick = { deckId ->
+                    navController.navigate(Screen.CardList.createRoute(deckId))
+                },
+                onAddCardClick = { deckId ->
+                    navController.navigate(Screen.AddCard.createRoute(deckId))
+                },
+                onLearnDeckClick = { deckId ->
+                    navController.navigate(Screen.FlashcardLearning.createRoute(deckId))
+                }
+            )
         }
 
         composable(
             route = Screen.CardList.route,
             arguments = listOf(navArgument("deckId") { type = NavType.StringType })
-        ) {
-            val deckId = it.arguments?.getString("deckId") ?: ""
-            com.project.minlishapp.presentation.vocabulary.components.CardManagementScreen(
+        ) { backStackEntry ->
+            val deckId = backStackEntry.arguments?.getString("deckId") ?: ""
+            CardListScreen(
                 deckId = deckId,
                 onBack = { navController.popBackStack() },
-                viewModel = hiltViewModel()
+                onAddCardClick = { id ->
+                    navController.navigate(Screen.AddCard.createRoute(id))
+                }
+            )
+        }
+
+        composable(
+            route = Screen.AddCard.route,
+            arguments = listOf(navArgument("deckId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val deckId = backStackEntry.arguments?.getString("deckId") ?: ""
+            CardManagementScreen(
+                deckId = deckId,
+                onBack = { navController.popBackStack() }
             )
         }
 
@@ -144,24 +163,24 @@ fun MainNavGraph(
         composable(Screen.MainDashboard.route) {
             DashboardScreen()
         }
-        
+
         composable(Screen.MainDecks.route) {
-            com.project.minlishapp.presentation.vocabulary.components.DeckManagementScreen(
-                onImportExportClick = { /* TODO */ },
+            DeckManagementScreen(
+                onImportExportClick = { },
                 onDeckClick = { deckId ->
                     rootNavController.navigate(Screen.CardList.createRoute(deckId))
                 },
                 onAddCardClick = { deckId ->
-                    rootNavController.navigate(Screen.CardList.createRoute(deckId))
+                    rootNavController.navigate(Screen.AddCard.createRoute(deckId))
                 },
                 onLearnDeckClick = { deckId ->
                     rootNavController.navigate(Screen.FlashcardLearning.createRoute(deckId))
                 }
             )
         }
-        
+
         composable(Screen.MainPractice.route) {
-            com.project.minlishapp.presentation.practice.QuizScreen(
+            QuizScreen(
                 onBack = { navController.popBackStack() },
                 onNavigateToDashboard = {
                     navController.navigate(Screen.MainDashboard.route) {
@@ -176,7 +195,7 @@ fun MainNavGraph(
                 }
             )
         }
-        
+
         composable(Screen.MainProfile.route) {
             com.project.minlishapp.presentation.profile.ProfileScreen(
                 onLogoutClick = {

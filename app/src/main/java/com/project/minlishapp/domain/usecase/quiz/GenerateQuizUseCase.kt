@@ -6,20 +6,6 @@ import kotlin.random.Random
 
 private const val DISTRACTOR_COUNT = 3
 
-data class MultipleChoiceQuestion(
-    val cardId: String,
-    val word: String,
-    val options: List<String>,
-    val correctAnswer: String
-)
-
-data class FillInBlankQuestion(
-    val cardId: String,
-    val sentence: String,
-    val correctAnswer: String,
-    val meaning: String
-)
-
 class GenerateQuizUseCase @Inject constructor() {
 
     fun generateMultipleChoice(
@@ -49,7 +35,8 @@ class GenerateQuizUseCase @Inject constructor() {
             cardId = answerCard.id,
             word = answerCard.word,
             options = (distractors + correctAnswer).shuffled(random),
-            correctAnswer = correctAnswer
+            correctAnswer = correctAnswer,
+            imageUrl = answerCard.imageUrl.takeIf { it.isNotBlank() }
         )
     }
 
@@ -74,7 +61,8 @@ class GenerateQuizUseCase @Inject constructor() {
                 ignoreCase = true
             ),
             correctAnswer = answerCard.word,
-            meaning = answerCard.meaning.trim()
+            meaning = answerCard.meaning.trim(),
+            phonetic = answerCard.pronunciation.takeIf { it.isNotBlank() }
         )
     }
 
