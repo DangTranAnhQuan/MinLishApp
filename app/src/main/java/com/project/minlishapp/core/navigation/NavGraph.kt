@@ -14,14 +14,28 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.project.minlishapp.presentation.auth.LoginScreen
 import com.project.minlishapp.presentation.auth.RegisterScreen
+<<<<<<< HEAD
 import com.project.minlishapp.presentation.vocabulary.components.CardListScreen
 import com.project.minlishapp.presentation.vocabulary.components.CardManagementScreen
 import com.project.minlishapp.presentation.vocabulary.components.DeckManagementScreen
+=======
+import com.project.minlishapp.presentation.flashcard.FlashcardScreen
+import com.project.minlishapp.presentation.practice.QuizScreen
+import com.project.minlishapp.presentation.dashboard.DashboardScreen
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+private const val DEBUG_START_ON_PRACTICE = true
+>>>>>>> 25066cdf46e3d5d1b7618a493510347e3c9bf22e
 
 @Composable
 fun NavGraph(
     navController: NavHostController,
-    startDestination: String = Screen.Login.route
+    startDestination: String = if (DEBUG_START_ON_PRACTICE) {
+        Screen.Practice.createRoute("debug_deck")
+    } else {
+        Screen.Register.route
+    }
 ) {
     NavHost(
         navController = navController,
@@ -34,7 +48,16 @@ fun NavGraph(
                     navController.navigate(Screen.Register.route)
                 },
                 onLoginSuccess = {
+<<<<<<< HEAD
                     navController.navigate(Screen.DeckList.route) {
+=======
+                    navController.navigate(Screen.Main.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                },
+                onNavigateToProfileSetup = {
+                    navController.navigate(Screen.Main.route) {
+>>>>>>> 25066cdf46e3d5d1b7618a493510347e3c9bf22e
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 },
@@ -50,7 +73,11 @@ fun NavGraph(
                     }
                 },
                 onRegisterSuccess = {
+<<<<<<< HEAD
                     navController.navigate(Screen.DeckList.route) {
+=======
+                    navController.navigate(Screen.Main.route) {
+>>>>>>> 25066cdf46e3d5d1b7618a493510347e3c9bf22e
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 },
@@ -58,10 +85,8 @@ fun NavGraph(
             )
         }
 
-        composable(Screen.Dashboard.route) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = "Dashboard Screen")
-            }
+        composable(Screen.Main.route) {
+            com.project.minlishapp.presentation.main.MainScreen(navController)
         }
 
         composable(Screen.DeckList.route) {
@@ -79,6 +104,7 @@ fun NavGraph(
         composable(
             route = Screen.CardList.route,
             arguments = listOf(navArgument("deckId") { type = NavType.StringType })
+<<<<<<< HEAD
         ) { backStackEntry ->
             val deckId = backStackEntry.arguments?.getString("deckId") ?: ""
             CardListScreen(
@@ -98,6 +124,14 @@ fun NavGraph(
             CardManagementScreen(
                 deckId = deckId,
                 onBack = { navController.popBackStack() }
+=======
+        ) {
+            val deckId = it.arguments?.getString("deckId") ?: ""
+            com.project.minlishapp.presentation.vocabulary.components.CardManagementScreen(
+                deckId = deckId,
+                onBack = { navController.popBackStack() },
+                viewModel = hiltViewModel()
+>>>>>>> 25066cdf46e3d5d1b7618a493510347e3c9bf22e
             )
         }
 
@@ -105,9 +139,80 @@ fun NavGraph(
             route = Screen.FlashcardLearning.route,
             arguments = listOf(navArgument("deckId") { type = NavType.StringType })
         ) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = "Flashcard Learning Screen")
-            }
+            FlashcardScreen(
+                onBack = { navController.navigateBackOrToRegister() },
+                viewModel = hiltViewModel()
+            )
+        }
+
+        composable(
+            route = Screen.Practice.route,
+            arguments = listOf(navArgument("deckId") { type = NavType.StringType })
+        ) {
+            QuizScreen(
+                onBack = { navController.navigateBackOrToRegister() },
+                onNavigateToDashboard = { navController.navigate(Screen.Main.route) },
+                viewModel = hiltViewModel()
+            )
+        }
+    }
+}
+
+private fun NavHostController.navigateBackOrToRegister() {
+    if (!popBackStack()) {
+        navigate(Screen.Register.route) {
+            popUpTo(graph.startDestinationId) { inclusive = true }
+            launchSingleTop = true
+        }
+    }
+}
+
+@Composable
+fun MainNavGraph(
+    navController: NavHostController,
+    rootNavController: NavHostController,
+    modifier: Modifier = Modifier
+) {
+    NavHost(
+        navController = navController,
+        startDestination = Screen.MainDashboard.route,
+        modifier = modifier
+    ) {
+        composable(Screen.MainDashboard.route) {
+            DashboardScreen()
+        }
+        
+        composable(Screen.MainDecks.route) {
+            com.project.minlishapp.presentation.vocabulary.components.DeckManagementScreen(
+                onImportExportClick = { /* TODO */ },
+                onDeckClick = { deckId ->
+                    rootNavController.navigate(Screen.CardList.createRoute(deckId))
+                },
+                onAddCardClick = { deckId ->
+                    rootNavController.navigate(Screen.CardList.createRoute(deckId))
+                }
+            )
+        }
+        
+        composable(Screen.MainPractice.route) {
+            com.project.minlishapp.presentation.practice.QuizScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToDashboard = {
+                    navController.navigate(Screen.MainDashboard.route) {
+                        popUpTo(Screen.MainDashboard.route)
+                    }
+                }
+            )
+        }
+        
+        composable(Screen.MainProfile.route) {
+            com.project.minlishapp.presentation.profile.ProfileScreen(
+                onLogoutClick = {
+                    rootNavController.navigate(Screen.Login.route) {
+                        popUpTo(Screen.Main.route) { inclusive = true }
+                    }
+                }
+            )
         }
     }
 }

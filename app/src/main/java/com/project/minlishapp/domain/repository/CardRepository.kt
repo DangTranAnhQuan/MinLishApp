@@ -12,4 +12,5 @@ interface CardRepository {
     suspend fun insertCards(cards: List<Card>)
     suspend fun updateCard(card: Card)
     suspend fun deleteCard(cardId: String)
+    fun getLearnedCardsCount(userId: String): Flow<Int>
 }

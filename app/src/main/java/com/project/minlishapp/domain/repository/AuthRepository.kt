@@ -6,13 +6,12 @@ import kotlinx.coroutines.flow.Flow
 interface AuthRepository {
     val currentUser: Flow<FirebaseUser?>
     suspend fun loginWithEmail(email: String, password: String): Result<FirebaseUser>
-    suspend fun signUpWithEmail(
-        email: String,
-        password: String,
+    suspend fun signUpBasic(email: String, password: String): Result<FirebaseUser>
+    suspend fun completeProfileSetup(
         displayName: String,
         learningTarget: String,
         currentLevel: String
-    ): Result<FirebaseUser>
+    ): Result<Unit>
     suspend fun loginWithCredential(credential: com.google.firebase.auth.AuthCredential): Result<FirebaseUser>
     suspend fun logout()
 }

@@ -111,4 +111,18 @@ class CardRepositoryImpl @Inject constructor(
     override suspend fun deleteCard(cardId: String) {
         firestore.collection("cards").document(cardId).delete().await()
     }
+
+    override fun getLearnedCardsCount(userId: String): Flow<Int> = callbackFlow {
+        val listener = firestore.collection("cards")
+            .whereEqualTo("userId", userId)
+            .whereGreaterThan("sm2Repetitions", 0)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                trySend(snapshot?.size() ?: 0)
+            }
+        awaitClose { listener.remove() }
+    }
 }
