@@ -8,6 +8,8 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.project.minlishapp.presentation.auth.LearningGoalScreen
+import com.project.minlishapp.presentation.auth.LevelSelectionScreen
 import com.project.minlishapp.presentation.auth.LoginScreen
 import com.project.minlishapp.presentation.auth.RegisterScreen
 import com.project.minlishapp.presentation.dashboard.DashboardScreen
@@ -17,16 +19,10 @@ import com.project.minlishapp.presentation.vocabulary.components.CardListScreen
 import com.project.minlishapp.presentation.vocabulary.components.CardManagementScreen
 import com.project.minlishapp.presentation.vocabulary.components.DeckManagementScreen
 
-private const val DEBUG_START_ON_PRACTICE = true
-
 @Composable
 fun NavGraph(
     navController: NavHostController,
-    startDestination: String = if (DEBUG_START_ON_PRACTICE) {
-        Screen.Practice.createRoute("debug_deck")
-    } else {
-        Screen.Register.route
-    }
+    startDestination: String = Screen.Login.route
 ) {
     NavHost(
         navController = navController,
@@ -43,7 +39,7 @@ fun NavGraph(
                     }
                 },
                 onNavigateToProfileSetup = {
-                    navController.navigate(Screen.Main.route) {
+                    navController.navigate(Screen.AuthLearningGoal.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 },
@@ -59,8 +55,28 @@ fun NavGraph(
                     }
                 },
                 onRegisterSuccess = {
+                    navController.navigate(Screen.AuthLearningGoal.route) {
+                        popUpTo(Screen.Register.route) { inclusive = true }
+                    }
+                },
+                viewModel = hiltViewModel()
+            )
+        }
+
+        composable(Screen.AuthLearningGoal.route) {
+            LearningGoalScreen(
+                onNavigateNext = {
+                    navController.navigate(Screen.AuthLevelSelection.route)
+                },
+                viewModel = hiltViewModel()
+            )
+        }
+
+        composable(Screen.AuthLevelSelection.route) {
+            LevelSelectionScreen(
+                onNavigateNext = {
                     navController.navigate(Screen.Main.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
+                        popUpTo(Screen.AuthLearningGoal.route) { inclusive = true }
                     }
                 },
                 viewModel = hiltViewModel()

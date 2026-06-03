@@ -177,15 +177,15 @@ class AuthViewModel @Inject constructor(
     }
 
     fun completeProfileSetup() {
-        if (_uiState.value.displayName.trim().isEmpty()) {
-            _uiState.update { it.copy(errorMessage = "Full name cannot be empty") }
-            return
-        }
+        val displayName = _uiState.value.displayName.trim()
+            .ifBlank { _uiState.value.currentUserEmail?.substringBefore("@") }
+            ?.takeIf { it.isNotBlank() }
+            ?: "Learner"
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val result = authRepository.completeProfileSetup(
-                _uiState.value.displayName.trim(),
+                displayName,
                 _uiState.value.learningTarget,
                 _uiState.value.currentLevel
             )

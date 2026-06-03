@@ -46,10 +46,14 @@ class PracticeRepositoryImpl @Inject constructor(
                     .toObject(DailyStatDto::class.java)
                     ?.toDomain()
                     ?: DailyStat(date = dateString)
+                val currentCardSnapshot = transaction.get(cardDocument)
                 val userSnapshot = transaction.get(userDocument)
-                val updatedDailyStat = currentDailyStat.record(attempt)
+                val shouldCountFirstTimeLearned = attempt.isFirstTimeLearned &&
+                    ((currentCardSnapshot.getLong(SM2_INTERVAL_FIELD)?.toInt() ?: 0) == 0)
+                val recordedAttempt = attempt.copy(isFirstTimeLearned = shouldCountFirstTimeLearned)
+                val updatedDailyStat = currentDailyStat.record(recordedAttempt)
 
-                transaction.set(attemptDocument, attempt.toDto())
+                transaction.set(attemptDocument, recordedAttempt.toDto())
                 transaction.set(cardDocument, reviewedCard.toDto())
                 transaction.set(
                     dailyStatDocument,
@@ -82,6 +86,7 @@ class PracticeRepositoryImpl @Inject constructor(
         const val CARDS_COLLECTION = "cards"
         const val DAILY_STATS_COLLECTION = "daily_stats"
         const val USERS_COLLECTION = "users"
+        const val SM2_INTERVAL_FIELD = "sm2Interval"
         const val CURRENT_STREAK_FIELD = "currentStreak"
         const val LAST_LEARNED_DATE_FIELD = "lastLearnedDate"
     }

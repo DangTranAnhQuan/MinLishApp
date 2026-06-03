@@ -237,7 +237,7 @@ fun FlashcardScreen(
                                             word = currentCard.word,
                                             pronunciation = currentCard.pronunciation,
                                             meaning = currentCard.meaning,
-                                            descriptionEn = currentCard.descriptionEn,
+                                            descriptionEn = currentCard.descriptionEn.ifBlank { currentCard.definition },
                                             example = currentCard.example,
                                             collocation = currentCard.collocation,
                                             relatedWords = currentCard.relatedWords,
@@ -471,8 +471,19 @@ private fun BackFace(
     relatedWords: String,
     note: String
 ) {
+    val hasDetails = listOf(
+        meaning,
+        descriptionEn,
+        example,
+        collocation,
+        relatedWords,
+        note
+    ).any { it.isNotBlank() }
+
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -489,12 +500,28 @@ private fun BackFace(
             textAlign = TextAlign.Center,
             style = TextStyle(fontSize = 14.sp)
         )
-        DetailRow(label = "Meaning", value = meaning)
-        DetailRow(label = "Description EN", value = descriptionEn)
-        DetailRow(label = "Example", value = example)
-        DetailRow(label = "Collocation", value = collocation)
-        DetailRow(label = "Related Words", value = relatedWords)
-        DetailRow(label = "Note", value = note.ifBlank { "Không có ghi chú" })
+        OptionalDetailRow(label = "Meaning", value = meaning)
+        OptionalDetailRow(label = "Description EN", value = descriptionEn)
+        OptionalDetailRow(label = "Example", value = example)
+        OptionalDetailRow(label = "Collocation", value = collocation)
+        OptionalDetailRow(label = "Related Words", value = relatedWords)
+        OptionalDetailRow(label = "Note", value = note)
+        if (!hasDetails) {
+            Text(
+                text = "No details yet.",
+                color = GrayText,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun OptionalDetailRow(label: String, value: String) {
+    val displayValue = value.trim()
+    if (displayValue.isNotEmpty()) {
+        DetailRow(label = label, value = displayValue)
     }
 }
 

@@ -57,6 +57,7 @@ class PracticeViewModel @Inject constructor(
         .takeUnless { it == DEBUG_DECK_ID }
         .orEmpty()
     private var pendingSubmission: PendingPracticeSubmission? = null
+    private val savingSubmissionIds = mutableSetOf<String>()
 
     private val _uiState = MutableStateFlow(
         PracticeUiState(
@@ -450,11 +451,29 @@ class PracticeViewModel @Inject constructor(
             reviewedCard = reviewResult.reviewedCard
         )
         pendingSubmission = submission
+        applyPracticeSubmissionOptimistically(submission)
         persistPracticeSubmission(submission)
     }
 
+    private fun applyPracticeSubmissionOptimistically(submission: PendingPracticeSubmission) {
+        _uiState.update {
+            val updatedUserCards = it.userCards.replaceCard(submission.reviewedCard)
+            refreshSetupDetails(
+                it.copy(
+                    userCards = updatedUserCards,
+                    isSavingResult = true,
+                    isResultSaved = true,
+                    resultSaveErrorMessage = null,
+                    lastReviewIntervalDays = submission.reviewedCard.sm2Interval,
+                    lastEaseFactor = submission.reviewedCard.sm2EaseFactor,
+                    lastNextReviewTime = submission.reviewedCard.nextReviewTime
+                )
+            )
+        }
+    }
+
     private fun persistPracticeSubmission(submission: PendingPracticeSubmission) {
-        if (_uiState.value.isSavingResult) return
+        if (!savingSubmissionIds.add(submission.attempt.id)) return
 
         viewModelScope.launch {
             _uiState.update {
@@ -469,33 +488,26 @@ class PracticeViewModel @Inject constructor(
                     reviewedCard = submission.reviewedCard
                 )
             }.onSuccess {
+                savingSubmissionIds.remove(submission.attempt.id)
                 if (pendingSubmission?.attempt?.id == submission.attempt.id) {
                     pendingSubmission = null
-                    _uiState.update {
-                        val updatedUserCards = it.userCards.replaceCard(submission.reviewedCard)
-                        refreshSetupDetails(
-                            it.copy(
-                                userCards = updatedUserCards,
-                                isSavingResult = false,
-                                isResultSaved = true,
-                                resultSaveErrorMessage = null,
-                                lastReviewIntervalDays = submission.reviewedCard.sm2Interval,
-                                lastEaseFactor = submission.reviewedCard.sm2EaseFactor,
-                                lastNextReviewTime = submission.reviewedCard.nextReviewTime
-                            )
-                        )
-                    }
+                }
+                _uiState.update {
+                    it.copy(
+                        isSavingResult = savingSubmissionIds.isNotEmpty(),
+                        resultSaveErrorMessage = null
+                    )
                 }
             }.onFailure { throwable ->
-                if (pendingSubmission?.attempt?.id == submission.attempt.id) {
-                    _uiState.update {
-                        it.copy(
-                            isSavingResult = false,
-                            isResultSaved = false,
-                            resultSaveErrorMessage = throwable.localizedMessage
-                                ?: "Không thể lưu kết quả luyện tập."
-                        )
-                    }
+                savingSubmissionIds.remove(submission.attempt.id)
+                pendingSubmission = submission
+                _uiState.update {
+                    it.copy(
+                        isSavingResult = savingSubmissionIds.isNotEmpty(),
+                        isResultSaved = true,
+                        resultSaveErrorMessage = throwable.localizedMessage
+                            ?: "Không thể lưu kết quả luyện tập."
+                    )
                 }
             }
         }
@@ -536,7 +548,7 @@ class PracticeViewModel @Inject constructor(
                 sessionMode = state.sessionMode,
                 currentTimeMs = now
             ).size,
-            newWordsCount = state.userCards.count { it.sm2Interval == 0 },
+            newWordsCount = practiceCards.count { it.sm2Interval == 0 },
             reviewSchedule = getReviewScheduleUseCase(learnedCards, now),
             reviewForecast = getReviewForecastUseCase(learnedCards, now)
         )

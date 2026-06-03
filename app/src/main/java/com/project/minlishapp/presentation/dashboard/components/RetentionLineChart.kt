@@ -125,7 +125,7 @@ fun RetentionLineChart(
                             alpha = currentAlpha
                         )
 
-                        val valueStr = "${data[index]!!.coerceIn(0f, maxData).roundToInt()}%"
+                        val valueStr = "${data[index]?.coerceIn(0f, maxData)?.roundToInt() ?: 0}%"
                         val textPaint = Paint().apply {
                             color = android.graphics.Color.GRAY
                             textSize = 12.sp.toPx()

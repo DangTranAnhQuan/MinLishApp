@@ -214,7 +214,7 @@ private fun EditCardDialog(
     var word by remember(card.id) { mutableStateOf(card.word) }
     var pronunciation by remember(card.id) { mutableStateOf(card.pronunciation) }
     var meaning by remember(card.id) { mutableStateOf(card.meaning) }
-    var definition by remember(card.id) { mutableStateOf(card.definition) }
+    var definition by remember(card.id) { mutableStateOf(card.descriptionEn.ifBlank { card.definition }) }
     var example by remember(card.id) { mutableStateOf(card.example) }
     var note by remember(card.id) { mutableStateOf(card.note) }
     var tags by remember(card.id) { mutableStateOf(card.tags.joinToString(", ")) }
@@ -250,7 +250,7 @@ private fun EditCardDialog(
                 OutlinedTextField(
                     value = definition,
                     onValueChange = { definition = it },
-                    label = { Text("Description") },
+                    label = { Text("Description (English)") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -283,6 +283,7 @@ private fun EditCardDialog(
                             pronunciation = pronunciation.trim(),
                             meaning = meaning.trim(),
                             definition = definition.trim(),
+                            descriptionEn = definition.trim(),
                             example = example.trim(),
                             note = note.trim(),
                             tags = tags.split(",")

@@ -58,11 +58,11 @@ class DashboardViewModel @Inject constructor(
                             }
                         }
                         launch {
-                            cardRepository.getLearnedCardsCount(firebaseUser.uid)
-                                .catch { e -> android.util.Log.e("DashboardVM", "getLearnedCardsCount error", e) }
-                                .collect { count ->
+                            cardRepository.getCardsByUser(firebaseUser.uid)
+                                .catch { e -> android.util.Log.e("DashboardVM", "getCardsByUser error", e) }
+                                .collect { cards ->
                                 _uiState.update {
-                                    it.copy(totalWordsLearned = count)
+                                    it.copy(totalWordsLearned = cards.size)
                                 }
                             }
                         }

@@ -24,12 +24,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import com.project.minlishapp.utils.TestDataInjection
 import java.util.Date
 import java.util.UUID
-import java.util.concurrent.TimeoutException
 
 @HiltViewModel
 class FlashcardViewModel @Inject constructor(
@@ -54,6 +52,7 @@ class FlashcardViewModel @Inject constructor(
     private var deckSessionCardOrderIds: List<String> = emptyList()
     private var dueCardsJob: Job? = null
     private var pendingSubmission: PendingFlashcardSubmission? = null
+    private val savingSubmissionIds = mutableSetOf<String>()
 
     private val _uiState = MutableStateFlow(
         FlashcardUiState(
@@ -216,56 +215,65 @@ class FlashcardViewModel @Inject constructor(
             )
             return
         }
+
+        val submission = pendingSubmission
+            ?.takeIf { it.attempt.cardId == currentCard.id }
+            ?: createSubmission(currentCard, userId, grade).also { pendingSubmission = it }
+        _uiState.value = _uiState.value.copy(isSubmitting = true, statusMessage = null, errorMessage = null)
+        completeOfficialPracticeReview(submission)
+        persistFlashcardSubmission(submission)
+    }
+
+    private fun completeOfficialPracticeReview(submission: PendingFlashcardSubmission) {
+        val updatedCard = submission.reviewedCard
+        reviewedCardIds += updatedCard.id
+        val currentState = _uiState.value
+        val remainingCards = currentState.cards.filterNot { it.id == updatedCard.id }
+        val nextIndex = currentState.currentCardIndex
+            .coerceAtMost((remainingCards.size - 1).coerceAtLeast(0))
+        _uiState.value = currentState.copy(
+            cards = remainingCards,
+            currentCardIndex = nextIndex,
+            isFlipped = false,
+            isSubmitting = false,
+            isSessionCompleted = remainingCards.isEmpty(),
+            completedReviewCount = reviewedCardIds.size,
+            sessionTotalCount = maxOf(currentState.sessionTotalCount, reviewedCardIds.size),
+            sessionNextReviewTime = listOfNotNull(
+                currentState.sessionNextReviewTime,
+                updatedCard.nextReviewTime
+            ).minByOrNull { it.time },
+            dueWordsCount = if (isSpacedRepetitionReview) remainingCards.size else currentState.dueWordsCount,
+            dueWordsInDeckCount = if (isSpacedRepetitionReview) remainingCards.size else currentState.dueWordsInDeckCount,
+            learnedWordsCount = if (isSpacedRepetitionReview) remainingCards.size else currentState.learnedWordsCount,
+            statusMessage = when (submission.grade) {
+                ReviewGrade.AGAIN -> "Đã đánh dấu cần ôn lại."
+                ReviewGrade.HARD -> "Đã cập nhật mức nhớ khó."
+                ReviewGrade.GOOD -> "Đã ghi nhận mức nhớ tốt."
+                ReviewGrade.EASY -> "Đã ghi nhận mức nhớ thành thạo."
+            }
+        )
+    }
+
+    private fun persistFlashcardSubmission(submission: PendingFlashcardSubmission) {
+        if (!savingSubmissionIds.add(submission.attempt.id)) return
+
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSubmitting = true, statusMessage = null, errorMessage = null)
             runCatching {
-                val submission = pendingSubmission
-                    ?.takeIf { it.attempt.cardId == currentCard.id }
-                    ?: createSubmission(currentCard, userId, grade).also { pendingSubmission = it }
-                val attempt = submission.attempt
-                val updatedCard = submission.reviewedCard
-                // Add timeout (8 seconds) to prevent hanging indefinitely when Firestore is unavailable
-                val updateSuccess = withTimeoutOrNull(8000L) {
-                    practiceRepository.saveReviewedAttempt(attempt, updatedCard)
-                    true
-                }
-                if (updateSuccess == null) {
-                    throw TimeoutException("Card update timed out after 8 seconds. Check Firestore connection.")
-                }
-                if (pendingSubmission?.attempt?.id == attempt.id) {
+                practiceRepository.saveReviewedAttempt(
+                    attempt = submission.attempt,
+                    reviewedCard = submission.reviewedCard
+                )
+            }.onSuccess {
+                savingSubmissionIds.remove(submission.attempt.id)
+                if (pendingSubmission?.attempt?.id == submission.attempt.id) {
                     pendingSubmission = null
                 }
-                reviewedCardIds += updatedCard.id
-                val currentState = _uiState.value
-                val remainingCards = currentState.cards.filterNot { it.id == updatedCard.id }
-                val nextIndex = currentState.currentCardIndex
-                    .coerceAtMost((remainingCards.size - 1).coerceAtLeast(0))
-                _uiState.value = currentState.copy(
-                    cards = remainingCards,
-                    currentCardIndex = nextIndex,
-                    isFlipped = false,
-                    isSubmitting = false,
-                    isSessionCompleted = remainingCards.isEmpty(),
-                    completedReviewCount = reviewedCardIds.size,
-                    sessionTotalCount = maxOf(currentState.sessionTotalCount, reviewedCardIds.size),
-                    sessionNextReviewTime = listOfNotNull(
-                        currentState.sessionNextReviewTime,
-                        updatedCard.nextReviewTime
-                    ).minByOrNull { it.time },
-                    dueWordsCount = if (isSpacedRepetitionReview) remainingCards.size else currentState.dueWordsCount,
-                    dueWordsInDeckCount = if (isSpacedRepetitionReview) remainingCards.size else currentState.dueWordsInDeckCount,
-                    learnedWordsCount = if (isSpacedRepetitionReview) remainingCards.size else currentState.learnedWordsCount,
-                    statusMessage = when (submission.grade) {
-                        ReviewGrade.AGAIN -> "Đã đánh dấu cần ôn lại."
-                        ReviewGrade.HARD -> "Đã cập nhật mức nhớ khó."
-                        ReviewGrade.GOOD -> "Đã ghi nhận mức nhớ tốt."
-                        ReviewGrade.EASY -> "Đã ghi nhận mức nhớ thành thạo."
-                    }
-                )
             }.onFailure { throwable ->
+                savingSubmissionIds.remove(submission.attempt.id)
+                pendingSubmission = submission
                 _uiState.value = _uiState.value.copy(
-                    isSubmitting = false,
-                    errorMessage = throwable.localizedMessage ?: "Không thể cập nhật thẻ hiện tại."
+                    errorMessage = throwable.localizedMessage ?: "Không thể lưu kết quả ôn tập."
                 )
             }
         }

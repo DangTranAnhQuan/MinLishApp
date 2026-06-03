@@ -130,20 +130,22 @@ class VocabularyViewModel @Inject constructor(
             runCatching {
                 val userId = authRepository.currentUser.first()?.uid
                     ?: error("You need to sign in before saving a card.")
+                val definition = form.definition.trim()
                 val card = Card(
                     id = UUID.randomUUID().toString(),
                     deckId = deckId,
                     userId = userId,
                     word = word,
-                    pronunciation = form.phonetic,
-                    meaning = form.meaning,
-                    definition = form.definition,
-                    example = form.example,
-                    collocation = form.collocation,
-                    relatedWords = form.relatedWords,
-                    note = form.note,
-                    imageUrl = form.imageUrl,
-                    audioUrl = form.audioUrl,
+                    pronunciation = form.phonetic.trim(),
+                    meaning = form.meaning.trim(),
+                    definition = definition,
+                    descriptionEn = definition,
+                    example = form.example.trim(),
+                    collocation = form.collocation.trim(),
+                    relatedWords = form.relatedWords.trim(),
+                    note = form.note.trim(),
+                    imageUrl = form.imageUrl.trim(),
+                    audioUrl = form.audioUrl.trim(),
                     tags = form.tags.split(",").map { it.trim() }.filter { it.isNotEmpty() },
                     createdAt = Date()
                 )
@@ -167,14 +169,30 @@ class VocabularyViewModel @Inject constructor(
     }
 
     fun updateCard(card: Card) {
-        if (card.word.isBlank()) {
+        val word = card.word.trim()
+        if (word.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Word is required.") }
             return
         }
 
         viewModelScope.launch {
             runCatching {
-                cardRepository.updateCard(card)
+                val descriptionEn = card.definition.ifBlank { card.descriptionEn }.trim()
+                val normalizedCard = card.copy(
+                    word = word,
+                    pronunciation = card.pronunciation.trim(),
+                    meaning = card.meaning.trim(),
+                    definition = descriptionEn,
+                    descriptionEn = descriptionEn,
+                    example = card.example.trim(),
+                    collocation = card.collocation.trim(),
+                    relatedWords = card.relatedWords.trim(),
+                    note = card.note.trim(),
+                    imageUrl = card.imageUrl.trim(),
+                    audioUrl = card.audioUrl.trim(),
+                    tags = card.tags.map { it.trim() }.filter { it.isNotEmpty() }
+                )
+                cardRepository.updateCard(normalizedCard)
                 _uiState.update { it.copy(errorMessage = null) }
             }.onFailure { throwable ->
                 _uiState.update {
@@ -227,6 +245,7 @@ class VocabularyViewModel @Inject constructor(
                                         line = reader.readLine()
                                         continue
                                     }
+                                    val definition = parts.getOrNull(3)?.trim() ?: ""
                                     val card = Card(
                                         id = UUID.randomUUID().toString(),
                                         deckId = deckId,
@@ -234,7 +253,8 @@ class VocabularyViewModel @Inject constructor(
                                         word = word,
                                         pronunciation = parts.getOrNull(1)?.trim() ?: "",
                                         meaning = parts.getOrNull(2)?.trim() ?: "",
-                                        definition = parts.getOrNull(3)?.trim() ?: "",
+                                        definition = definition,
+                                        descriptionEn = definition,
                                         example = parts.getOrNull(4)?.trim() ?: "",
                                         imageUrl = parts.getOrNull(5)?.trim() ?: "",
                                         audioUrl = parts.getOrNull(6)?.trim() ?: "",
@@ -285,10 +305,11 @@ class VocabularyViewModel @Inject constructor(
                 val csvContent = buildString {
                     append("Word,Phonetic,Meaning,Definition,Example,ImageUrl,AudioUrl,Tags\n")
                     cards.forEach { card ->
+                        val definition = card.descriptionEn.ifBlank { card.definition }
                         append("${escapeCsv(card.word)},")
                         append("${escapeCsv(card.pronunciation)},")
                         append("${escapeCsv(card.meaning)},")
-                        append("${escapeCsv(card.definition)},")
+                        append("${escapeCsv(definition)},")
                         append("${escapeCsv(card.example)},")
                         append("${escapeCsv(card.imageUrl)},")
                         append("${escapeCsv(card.audioUrl)},")
