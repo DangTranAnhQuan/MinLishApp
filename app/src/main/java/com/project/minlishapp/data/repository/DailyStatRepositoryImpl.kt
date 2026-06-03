@@ -8,9 +8,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Locale
+import java.time.LocalDate
 import javax.inject.Inject
 
 class DailyStatRepositoryImpl @Inject constructor(
@@ -18,12 +16,10 @@ class DailyStatRepositoryImpl @Inject constructor(
 ) : DailyStatRepository {
 
     override fun getWeeklyStats(userId: String): Flow<List<DailyStat>> = callbackFlow {
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val cal = Calendar.getInstance()
-        val today = cal.time
-        cal.add(Calendar.DAY_OF_YEAR, -6)
-        val lastWeekStr = sdf.format(cal.time)
-        val todayStr = sdf.format(today)
+        val formatter = java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
+        val today = LocalDate.now(java.time.ZoneOffset.UTC)
+        val lastWeekStr = today.minusDays(6).format(formatter)
+        val todayStr = today.format(formatter)
 
         val listener = firestore.collection("daily_stats")
             .whereEqualTo("userId", userId)
@@ -38,6 +34,22 @@ class DailyStatRepositoryImpl @Inject constructor(
                             dto.toDomain()
                         } else null
                     }
+                } ?: emptyList()
+                trySend(stats)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    override fun getAllStats(userId: String): Flow<List<DailyStat>> = callbackFlow {
+        val listener = firestore.collection("daily_stats")
+            .whereEqualTo("userId", userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val stats = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(DailyStatDto::class.java)?.toDomain()
                 } ?: emptyList()
                 trySend(stats)
             }

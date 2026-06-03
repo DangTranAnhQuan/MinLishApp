@@ -19,14 +19,14 @@ class GetDashboardStatsUseCase @Inject constructor(
 ) {
     operator fun invoke(userId: String): Flow<DashboardStats> {
         return repository.getWeeklyStats(userId).map { stats ->
-            val formatter = SimpleDateFormat(DATE_FORMAT, Locale.getDefault())
+            val formatter = java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
+            val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
             val last7Days = (6 downTo 0).map { daysAgo ->
-                val calendar = Calendar.getInstance()
-                calendar.add(Calendar.DAY_OF_YEAR, -daysAgo)
-                formatter.format(calendar.time)
+                val pastDate = today.minusDays(daysAgo.toLong())
+                pastDate.format(formatter)
             }
             val statMap = stats.associateBy { it.date }
-            val todayStat = statMap[formatter.format(Calendar.getInstance().time)]
+            val todayStat = statMap[today.format(formatter)]
 
             DashboardStats(
                 accuracy = if (todayStat != null && todayStat.totalReviews > 0) {

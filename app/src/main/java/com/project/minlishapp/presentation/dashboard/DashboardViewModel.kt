@@ -20,6 +20,9 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
@@ -58,11 +61,11 @@ class DashboardViewModel @Inject constructor(
                             }
                         }
                         launch {
-                            cardRepository.getCardsByUser(firebaseUser.uid)
-                                .catch { e -> android.util.Log.e("DashboardVM", "getCardsByUser error", e) }
-                                .collect { cards ->
+                            cardRepository.getLearnedCardsCount(firebaseUser.uid)
+                                .catch { e -> android.util.Log.e("DashboardVM", "getLearnedCardsCount error", e) }
+                                .collect { count ->
                                 _uiState.update {
-                                    it.copy(totalWordsLearned = cards.size)
+                                    it.copy(totalWordsLearned = count)
                                 }
                             }
                         }
@@ -89,16 +92,17 @@ class DashboardViewModel @Inject constructor(
 
 internal fun calculateEffectiveStreak(
     currentStreak: Int,
-    lastLearnedDate: Date?,
-    now: Date = Date()
+    lastLearnedDate: Date?, 
+    now: LocalDate = LocalDate.now() 
 ): Int {
     if (lastLearnedDate == null || currentStreak == 0) return 0
-
-    val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    val lastLearnedDateString = formatter.format(lastLearnedDate)
-    val calendar = Calendar.getInstance().apply { time = now }
-    if (lastLearnedDateString == formatter.format(calendar.time)) return currentStreak
-
-    calendar.add(Calendar.DAY_OF_YEAR, -1)
-    return if (lastLearnedDateString == formatter.format(calendar.time)) currentStreak else 0
+    val lastLearnedLocalDate = lastLearnedDate.toInstant()
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
+    val daysBetween = ChronoUnit.DAYS.between(lastLearnedLocalDate, now)
+    return when {
+        daysBetween == 0L -> currentStreak 
+        daysBetween == 1L -> currentStreak 
+        else -> 0                         
+    }
 }

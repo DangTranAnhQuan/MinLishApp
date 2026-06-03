@@ -305,6 +305,18 @@ private fun ProfileAvatar(
             color = Color(0xff64748b).copy(alpha = 0.7f),
             style = TextStyle(fontSize = 14.sp)
         )
+        Spacer(modifier = Modifier.height(12.dp))
+        Surface(
+            color = Color(0xfff1f5f9),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text(
+                text = "Overall Accuracy: ${String.format("%.1f", uiState.overallAccuracy)}%",
+                color = Color(0xff0f172a),
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
     }
 }
 
