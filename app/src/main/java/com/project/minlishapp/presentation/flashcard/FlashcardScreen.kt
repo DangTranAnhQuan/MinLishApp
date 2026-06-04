@@ -14,8 +14,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -208,7 +211,7 @@ fun FlashcardScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(360.dp)
+                                .heightIn(min = 360.dp)
                                 .clickable(enabled = !uiState.isSubmitting) { viewModel.toggleFlip() },
                             shape = RoundedCornerShape(28.dp),
                             color = SoftWhite,
@@ -337,15 +340,16 @@ fun FlashcardScreen(
 
 @Composable
 fun Header(
+    modifier: Modifier = Modifier,
     onBack: () -> Unit,
-    title: String = "Flashcard Learning",
-    modifier: Modifier = Modifier
+    title: String = "Flashcard Learning"
 ) {
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
+            .statusBarsPadding()
             .background(color = SoftWhite)
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
@@ -482,8 +486,8 @@ private fun BackFace(
 
     Column(
         modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .fillMaxWidth()
+            .wrapContentHeight(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
