@@ -4,11 +4,9 @@ import android.graphics.Paint
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -152,9 +150,9 @@ fun RetentionLineChart(
         }
     }
 
-    androidx.compose.foundation.layout.Row(
+    Row(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
         daysOfWeek.forEachIndexed { index, day ->
             Text(
@@ -162,7 +160,7 @@ fun RetentionLineChart(
                 fontSize = 12.sp,
                 color = if (index == daysOfWeek.size - 1) Color(0xFFFF9800) else com.project.minlishapp.ui.theme.GrayText,
                 modifier = Modifier.weight(1f),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                textAlign = TextAlign.Center,
                 lineHeight = 16.sp
             )
         }

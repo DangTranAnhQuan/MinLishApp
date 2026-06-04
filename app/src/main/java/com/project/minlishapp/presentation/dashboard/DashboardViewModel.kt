@@ -24,6 +24,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
+import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit.DAYS
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
@@ -100,7 +102,7 @@ internal fun calculateEffectiveStreak(
     val lastLearnedLocalDate = lastLearnedDate.toInstant()
         .atZone(ZoneOffset.UTC)
         .toLocalDate()
-    val daysBetween = ChronoUnit.DAYS.between(lastLearnedLocalDate, now)
+    val daysBetween = DAYS.between(lastLearnedLocalDate, now)
     return when {
         daysBetween == 0L -> currentStreak 
         daysBetween == 1L -> currentStreak 
