@@ -118,7 +118,7 @@ class MainActivity : ComponentActivity() {
 
     private fun scheduleDailyReminder() {
         val workRequest = PeriodicWorkRequestBuilder<DailyReminderWorker>(
-            24, TimeUnit.HOURS
+            15, TimeUnit.MINUTES
         ).build()
 
         WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(

@@ -1,6 +1,7 @@
 package com.project.minlishapp.core.worker
 
 import android.content.Context
+import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -14,26 +15,33 @@ import kotlinx.coroutines.flow.first
 @HiltWorker
 class DailyReminderWorker @AssistedInject constructor(
     @Assisted context: Context,
-    @Assisted params: WorkerParameters,
+    @Assisted workerParams: WorkerParameters,
     private val getDueCardsUseCase: GetDueCardsUseCase,
     private val authRepository: AuthRepository
-) : CoroutineWorker(context, params) {
+) : CoroutineWorker(context, workerParams) {
 
     override suspend fun doWork(): Result {
-        val currentUser = authRepository.currentUser.first()
-        if (currentUser == null) return Result.success()
+        Log.d("DailyReminderWorker", "Worker started")
+        return try {
+            val currentUser = authRepository.currentUser.first()
+            if (currentUser == null) {
+                return Result.success()
+            }
 
-        val dueCards = getDueCardsUseCase(currentUser.uid).first()
-        val count = dueCards.size
+            val dueCards = getDueCardsUseCase(currentUser.uid).first()
+            val count = dueCards.size
 
-        if (count > 0) {
-            NotificationHelper.showNotification(
-                context = applicationContext,
-                title = "Đã đến giờ ôn tập! 🚀",
-                message = "Bạn có $count từ vựng đang chờ được ôn tập hôm nay..."
-            )
+            if (count > 0) {
+                NotificationHelper.showNotification(
+                    context = applicationContext,
+                    title = "MinLish - Đã đến giờ ôn tập! 🚀",
+                    message = "Bạn có $count từ vựng đang chờ được ôn tập hôm nay..."
+                )
+            }
+
+            Result.success()
+        } catch (e: Exception) {
+            Result.retry()
         }
-
-        return Result.success()
     }
 }

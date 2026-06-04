@@ -87,6 +87,7 @@ fun ProfileScreen(
             showSuccessBanner = true
             kotlinx.coroutines.delay(3000)
             showSuccessBanner = false
+            viewModel.resetSuccessState()
         }
     }
 

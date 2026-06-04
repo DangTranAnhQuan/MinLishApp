@@ -150,6 +150,10 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
+    fun resetSuccessState() {
+        _uiState.update { it.copy(isSuccess = false) }
+    }
+
     fun logout() {
         viewModelScope.launch {
             authRepository.logout()
