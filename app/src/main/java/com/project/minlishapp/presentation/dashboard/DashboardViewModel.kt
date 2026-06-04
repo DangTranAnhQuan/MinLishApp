@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 import java.util.Date
 import javax.inject.Inject
 import java.time.LocalDate
-import java.time.ZoneOffset
+import java.time.ZoneId
 import java.time.temporal.ChronoUnit.DAYS
 
 @HiltViewModel
@@ -90,11 +90,11 @@ class DashboardViewModel @Inject constructor(
 internal fun calculateEffectiveStreak(
     currentStreak: Int,
     lastLearnedDate: Date?, 
-    now: LocalDate = LocalDate.now(ZoneOffset.UTC) 
+    now: LocalDate = LocalDate.now(ZoneId.systemDefault()) 
 ): Int {
     if (lastLearnedDate == null || currentStreak == 0) return 0
     val lastLearnedLocalDate = lastLearnedDate.toInstant()
-        .atZone(ZoneOffset.UTC)
+        .atZone(ZoneId.systemDefault())
         .toLocalDate()
     val daysBetween = DAYS.between(lastLearnedLocalDate, now)
     return when {

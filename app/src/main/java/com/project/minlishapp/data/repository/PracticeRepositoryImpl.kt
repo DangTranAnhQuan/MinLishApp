@@ -14,6 +14,7 @@ import com.project.minlishapp.domain.repository.PracticeRepository
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.time.temporal.ChronoUnit.DAYS
+import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
@@ -117,11 +118,11 @@ internal fun calculateNextStreak(
     if (lastLearnedDate == null) return 1
     
     val answeredLocalDate = answeredAt.toInstant()
-        .atZone(java.time.ZoneOffset.UTC)
+        .atZone(ZoneId.systemDefault())
         .toLocalDate()
         
     val lastLearnedLocalDate = lastLearnedDate.toInstant()
-        .atZone(java.time.ZoneOffset.UTC)
+        .atZone(ZoneId.systemDefault())
         .toLocalDate()
 
     val daysBetween = DAYS.between(lastLearnedLocalDate, answeredLocalDate)

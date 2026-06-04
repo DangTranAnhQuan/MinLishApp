@@ -9,6 +9,8 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 class DailyStatRepositoryImpl @Inject constructor(
@@ -16,8 +18,8 @@ class DailyStatRepositoryImpl @Inject constructor(
 ) : DailyStatRepository {
 
     override fun getWeeklyStats(userId: String): Flow<List<DailyStat>> = callbackFlow {
-        val formatter = java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
-        val today = LocalDate.now(java.time.ZoneOffset.UTC)
+        val formatter = DateTimeFormatter.ISO_LOCAL_DATE
+        val today = LocalDate.now(ZoneId.systemDefault())
         val lastWeekStr = today.minusDays(6).format(formatter)
         val todayStr = today.format(formatter)
 

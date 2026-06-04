@@ -58,9 +58,26 @@ class VocabularyViewModel @Inject constructor(
                         }
                         .collect { decks ->
                             _uiState.update { it.copy(decks = decks, isLoading = false, errorMessage = null) }
+                            syncWordCounts(decks)
                         }
                 } ?: run {
                     _uiState.update { it.copy(isLoading = false) }
+                }
+            }
+        }
+    }
+
+    private fun syncWordCounts(decks: List<Deck>) {
+        viewModelScope.launch {
+            decks.forEach { deck ->
+                try {
+                    val cards = cardRepository.getCardsInDeck(deck.id).first()
+                    val actualCount = cards.size
+                    if (deck.wordCount != actualCount) {
+                        deckRepository.updateDeck(deck.copy(wordCount = actualCount))
+                    }
+                } catch (e: Exception) {
+                    // Ignore errors during sync
                 }
             }
         }

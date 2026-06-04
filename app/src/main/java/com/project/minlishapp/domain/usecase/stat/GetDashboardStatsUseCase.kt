@@ -6,6 +6,9 @@ import kotlinx.coroutines.flow.map
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 data class DashboardStats(
@@ -19,8 +22,8 @@ class GetDashboardStatsUseCase @Inject constructor(
 ) {
     operator fun invoke(userId: String): Flow<DashboardStats> {
         return repository.getWeeklyStats(userId).map { stats ->
-            val formatter = java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
-            val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+            val formatter = DateTimeFormatter.ISO_LOCAL_DATE
+            val today = LocalDate.now(ZoneId.systemDefault())
             val last7Days = (6 downTo 0).map { daysAgo ->
                 val pastDate = today.minusDays(daysAgo.toLong())
                 pastDate.format(formatter)
