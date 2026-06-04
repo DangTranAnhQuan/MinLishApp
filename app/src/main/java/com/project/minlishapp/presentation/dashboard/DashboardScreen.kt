@@ -2,6 +2,8 @@ package com.project.minlishapp.presentation.dashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -28,11 +30,13 @@ fun DashboardContent(
     uiState: DashboardUiState,
     modifier: Modifier = Modifier
 ) {
+    val scrollState = rememberScrollState()
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFFFFFFF))
             .padding(20.dp)
+            .verticalScroll(scrollState)
     ) {
         LevelBadge(level = uiState.level, totalWordsLearned = uiState.totalWordsLearned)
         

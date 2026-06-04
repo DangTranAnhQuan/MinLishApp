@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,11 +25,11 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.project.minlishapp.ui.theme.DarkText
-import com.project.minlishapp.ui.theme.VeryLightGray
-import com.project.minlishapp.ui.theme.VibrantBlue
-import com.project.minlishapp.ui.theme.VibrantBlueLight
+import androidx.compose.foundation.layout.Arrangement
+import com.project.minlishapp.ui.theme.*
 import androidx.compose.ui.graphics.Color
+import java.util.*
+import java.text.SimpleDateFormat
 
 @Composable
 fun DailyActivityChart(
@@ -127,25 +129,25 @@ fun DailyActivityChart(
     )
 
     val daysOfWeek = remember {
-        val format = java.text.SimpleDateFormat("EEE\ndd", java.util.Locale.getDefault())
+        val format = SimpleDateFormat("EEE\ndd", Locale.getDefault())
         (6 downTo 0).map { i ->
-            val cal = java.util.Calendar.getInstance()
-            cal.add(java.util.Calendar.DAY_OF_YEAR, -i)
+            val cal = Calendar.getInstance()
+            cal.add(Calendar.DAY_OF_YEAR, -i)
             format.format(cal.time)
         }
     }
 
-    androidx.compose.foundation.layout.Row(
+    Row(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
         daysOfWeek.forEachIndexed { index, day ->
             Text(
                 text = day,
                 fontSize = 12.sp,
-                color = if (index == daysOfWeek.size - 1) Color(0xFFFF9800) else com.project.minlishapp.ui.theme.GrayText,
+                color = if (index == daysOfWeek.size - 1) Color(0xFFFF9800) else GrayText,
                 modifier = Modifier.weight(1f),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                textAlign = TextAlign.Center,
                 lineHeight = 16.sp
             )
         }
