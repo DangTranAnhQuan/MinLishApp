@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -143,6 +145,7 @@ fun DeckManagementScreen(
         modifier = modifier
             .fillMaxSize()
             .background(color = Color.White)
+            .statusBarsPadding()
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
@@ -154,7 +157,7 @@ fun DeckManagementScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(color = Color.White)
-                    .padding(start = 16.dp, end = 16.dp, top = 48.dp, bottom = 16.dp)
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp)
             ) {
                 Text(
                     text = "My Decks",
@@ -226,6 +229,7 @@ fun DeckManagementScreen(
                         columns = GridCells.Fixed(2),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp),
                         modifier = Modifier.weight(1f)
                     ) {
                         items(uiState.decks.filter { it.title.contains(uiState.searchQuery, ignoreCase = true) }) { deck ->
@@ -245,7 +249,7 @@ fun DeckManagementScreen(
                             )
                         }
                         item {
-                            NewDeckCard(onClick = { viewModel.addDeck("New Deck", "", emptyList()) })
+                            NewDeckCard(onClick = { viewModel.addDeck("", emptyList()) })
                         }
                     }
                 }
@@ -260,7 +264,7 @@ fun DeckManagementScreen(
                 .align(alignment = Alignment.BottomEnd)
                 .padding(bottom = 80.dp, end = 16.dp)
                 .shadow(elevation = 5.dp, shape = RoundedCornerShape(16.dp))
-                .clickable { viewModel.addDeck("New Deck", "", emptyList()) }
+                .clickable { viewModel.addDeck("", emptyList()) }
         ) {
             Box(
                 contentAlignment = Alignment.Center,

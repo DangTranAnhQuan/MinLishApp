@@ -79,6 +79,7 @@ fun CardListScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White)
+            .statusBarsPadding()
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Top Bar
@@ -86,7 +87,7 @@ fun CardListScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 12.dp, end = 20.dp, top = 48.dp, bottom = 16.dp)
+                    .padding(start = 12.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
             ) {
                 IconButton(onClick = onBack) {
                     Icon(Icons.Default.ArrowBack, contentDescription = null)

@@ -84,14 +84,31 @@ class VocabularyViewModel @Inject constructor(
     }
 
     // Deck Operations
-    fun addDeck(title: String, description: String, tags: List<String>) {
+    fun addDeck(description: String, tags: List<String>) {
         viewModelScope.launch {
             val user = authRepository.currentUser.first()
             user?.uid?.let { userId ->
+                val currentDecks = _uiState.value.decks
+                val nextNumber = currentDecks
+                    .mapNotNull { deck ->
+                        if (deck.title.startsWith("New Deck ")) {
+                            deck.title.removePrefix("New Deck ").toIntOrNull()
+                        } else if (deck.title == "New Deck") {
+                            1
+                        } else null
+                    }
+                    .maxOrNull()?.plus(1) ?: (if (currentDecks.any { it.title == "New Deck" }) 2 else 1)
+
+                val defaultTitle = if (nextNumber == 1 && currentDecks.none { it.title == "New Deck" }) {
+                    "New Deck"
+                } else {
+                    "New Deck $nextNumber"
+                }
+
                 val deck = Deck(
                     id = UUID.randomUUID().toString(),
                     userId = userId,
-                    title = title,
+                    title = defaultTitle,
                     description = description,
                     tags = tags,
                     createdAt = Date()
