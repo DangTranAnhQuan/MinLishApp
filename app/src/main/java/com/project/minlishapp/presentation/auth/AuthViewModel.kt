@@ -12,6 +12,7 @@ import com.project.minlishapp.domain.repository.AuthRepository
 import com.project.minlishapp.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,7 +76,10 @@ class AuthViewModel @Inject constructor(
                                     isAuthenticated = false,
                                     isProfileComplete = null,
                                     isCheckingAuth = false,
-                                    currentUserEmail = null
+                                    currentUserEmail = null,
+                                    email = "",
+                                    password = "",
+                                    displayName = ""
                                 )
                             }
                         }
@@ -113,6 +117,7 @@ class AuthViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 displayName = displayName,
+                displayNameError = if (displayName.isBlank()) "Full name cannot be empty" else null,
                 errorMessage = null
             )
         }
@@ -155,6 +160,11 @@ class AuthViewModel @Inject constructor(
     }
 
     fun signUp() {
+        if (_uiState.value.displayName.trim().isEmpty()) {
+            _uiState.update { it.copy(displayNameError = "Full name cannot be empty") }
+            return
+        }
+
         if (!_uiState.value.isEmailValid || !_uiState.value.isPasswordValid) {
             _uiState.update { it.copy(errorMessage = "Please correct the input errors") }
             return
@@ -279,6 +289,7 @@ data class AuthUiState(
     val isEmailValid: Boolean = false,
     val emailError: String? = null,
     val password: String = "",
+    val displayNameError: String? = null,
     val isPasswordValid: Boolean = false,
     val passwordError: String? = null,
     val displayName: String = "",

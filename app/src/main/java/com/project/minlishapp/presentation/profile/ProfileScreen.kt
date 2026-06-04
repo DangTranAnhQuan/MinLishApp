@@ -97,7 +97,6 @@ fun ProfileScreen(
                 viewModel.onProfilePictureChange(avatarResName)
 //            onAvatarSelected = { avatarResName ->
 //                onProfilePictureChange(avatarResName)
-//                showAvatarDialog = false
             }
         )
     }
@@ -260,11 +259,17 @@ private fun ProfileAvatar(
         modifier = Modifier.fillMaxWidth()
     ) {
         Box(
-            modifier = Modifier.size(100.dp),
+            modifier = Modifier.size(100.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .border(
+                    width = 2.dp,
+                    color = Color(0xFF2BDCEE),
+                    shape = RoundedCornerShape(12.dp)
+                ),
             contentAlignment = Alignment.BottomEnd
         ) {
             Image(
-                painter = painterResource(id = if (avatarResId != 0) avatarResId else R.drawable.ic_email),
+                painter = painterResource(id = if (avatarResId != 0) avatarResId else R.drawable.avatar_01),
                 contentDescription = "Profile Avatar",
                 modifier = Modifier
                     .fillMaxSize(),
@@ -452,14 +457,23 @@ fun AvatarSelectionDialog(
     onAvatarSelected: (String) -> Unit
 ) {
     val avatars = listOf(
-        "ic_profile_avatar",
-        "ic_fullname",
-        "ic_email",
-        "ic_password",
-        "ic_google",
-        "ic_logout"
+        "avatar_01",
+        "avatar_02",
+        "avatar_03",
+        "avatar_04",
+        "avatar_05",
+        "avatar_06",
+        "avatar_07",
+        "avatar_08",
+        "avatar_09",
+        "avatar_10",
+        "avatar_11",
+        "avatar_12",
+        "avatar_13",
+        "avatar_14"
     )
 
+    var temporarySelectedAvatar by remember { mutableStateOf("avatar_01") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -484,15 +498,26 @@ fun AvatarSelectionDialog(
                     val resName = avatars[index]
                     val context = LocalContext.current
                     val resId = context.resources.getIdentifier(resName, "drawable", context.packageName)
-                    
+
+                    val isSelected = temporarySelectedAvatar == resName
+
                     Box(
                         modifier = Modifier
                             .aspectRatio(1f)
-                            .clickable { onAvatarSelected(resName) },
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isSelected) Color(0xfff1f5f9) else Color.Transparent)
+                            .border(
+                                width = if (isSelected) 2.dp else 0.dp,
+                                color = if (isSelected) Color(0xff1a73e8) else Color.Transparent,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .clickable {
+                                temporarySelectedAvatar = resName
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
-                            painter = painterResource(id = if (resId != 0) resId else R.drawable.ic_profile_avatar),
+                            painter = painterResource(id = if (resId != 0) resId else R.drawable.avatar_01),
                             contentDescription = null,
                             contentScale = ContentScale.Fit,
                             modifier = Modifier.size(64.dp)
@@ -502,11 +527,25 @@ fun AvatarSelectionDialog(
             }
         },
         confirmButton = {
+            TextButton(
+                onClick = {
+                    onAvatarSelected(temporarySelectedAvatar)
+                    onDismiss()
+                }
+            ) {
+                Text(
+                    text = "Save",
+                    color = Color(0xff1a73e8),
+                    fontWeight = FontWeight.Bold,
+                    style = TextStyle(fontSize = 16.sp)
+                )
+            }
+        },
+        dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(
                     text = "Cancel",
-                    color = Color(0xff1a73e8),
-                    fontWeight = FontWeight.Bold,
+                    color = Color(0xff64748b),
                     style = TextStyle(fontSize = 16.sp)
                 )
             }
