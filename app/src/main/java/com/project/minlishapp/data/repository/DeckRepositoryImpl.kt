@@ -56,6 +56,12 @@ class DeckRepositoryImpl @Inject constructor(
         newDoc.set(dto).await()
     }
 
+    override suspend fun updateDeck(deck: Deck) {
+        if (deck.id.isBlank()) return
+        val dto = deck.toDto()
+        firestore.collection("decks").document(deck.id).set(dto).await()
+    }
+
     override suspend fun deleteDeck(deckId: String) {
         firestore.collection("decks").document(deckId).delete().await()
     }

@@ -36,6 +36,22 @@ class CardRepositoryImpl @Inject constructor(
         awaitClose { listener.remove() }
     }
 
+    override fun getCardsByUser(userId: String): Flow<List<Card>> = callbackFlow {
+        val listener = firestore.collection("cards")
+            .whereEqualTo("userId", userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val cards = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(CardDto::class.java)?.copy(id = doc.id)?.toDomain()
+                } ?: emptyList()
+                trySend(cards)
+            }
+        awaitClose { listener.remove() }
+    }
+
     override fun getAllCards(): Flow<List<Card>> = callbackFlow {
         val listener = firestore.collection("cards")
             .addSnapshotListener { snapshot, error ->
@@ -99,7 +115,7 @@ class CardRepositoryImpl @Inject constructor(
     override fun getLearnedCardsCount(userId: String): Flow<Int> = callbackFlow {
         val listener = firestore.collection("cards")
             .whereEqualTo("userId", userId)
-            .whereGreaterThan("sm2Repetitions", 0)
+            .whereGreaterThan("sm2Interval", 0)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)

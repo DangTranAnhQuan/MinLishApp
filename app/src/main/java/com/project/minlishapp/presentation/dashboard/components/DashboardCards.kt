@@ -51,7 +51,7 @@ fun DashboardCards(
         StatCard(
             modifier = Modifier.weight(1f),
             title = "Accuracy",
-            value = "${uiState.accuracy}%",
+            value = String.format("%.2f%%", uiState.accuracy),
             icon = Icons.Default.CheckCircle,
             iconColor = Color(0xFF4CAF50) // Green
         )

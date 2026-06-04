@@ -5,5 +5,5 @@ import kotlinx.coroutines.flow.Flow
 
 interface DailyStatRepository {
     fun getWeeklyStats(userId: String): Flow<List<DailyStat>>
+    fun getAllStats(userId: String): Flow<List<DailyStat>>
 }
-

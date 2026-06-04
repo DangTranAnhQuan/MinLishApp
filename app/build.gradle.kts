@@ -8,11 +8,7 @@ plugins {
 
 android {
     namespace = "com.project.minlishapp"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.project.minlishapp"
@@ -74,6 +70,7 @@ dependencies {
     // Dagger Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    ksp(libs.androidx.hilt.compiler)
     implementation(libs.androidx.hilt.work)
 
     // WorkManager

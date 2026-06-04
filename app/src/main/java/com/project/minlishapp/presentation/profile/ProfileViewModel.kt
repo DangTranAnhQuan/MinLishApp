@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.project.minlishapp.domain.model.User
 import com.project.minlishapp.domain.repository.AuthRepository
 import com.project.minlishapp.domain.repository.UserRepository
+import com.project.minlishapp.domain.repository.DailyStatRepository
 import com.project.minlishapp.presentation.auth.LevelInfo
 import com.project.minlishapp.presentation.auth.SharedLearningTargets
 import com.project.minlishapp.presentation.auth.SharedLevels
@@ -23,7 +24,8 @@ import javax.inject.Inject
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val dailyStatRepository: DailyStatRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -40,6 +42,18 @@ class ProfileViewModel @Inject constructor(
                 .flatMapLatest { firebaseUser ->
                     if (firebaseUser != null) {
                         _uiState.update { it.copy(email = firebaseUser.email ?: "") }
+                        viewModelScope.launch {
+                            dailyStatRepository.getAllStats(firebaseUser.uid).collect { stats ->
+                                val totalCorrect = stats.sumOf { it.correctReviews }
+                                val totalReviews = stats.sumOf { it.totalReviews }
+                                val accuracy = if (totalReviews > 0) {
+                                    (totalCorrect.toFloat() / totalReviews) * 100f
+                                } else {
+                                    0f
+                                }
+                                _uiState.update { it.copy(overallAccuracy = accuracy) }
+                            }
+                        }
                         userRepository.getUser(firebaseUser.uid)
                     } else {
                         flowOf(null)
@@ -136,6 +150,10 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
+    fun resetSuccessState() {
+        _uiState.update { it.copy(isSuccess = false) }
+    }
+
     fun logout() {
         viewModelScope.launch {
             authRepository.logout()
@@ -153,6 +171,7 @@ data class ProfileUiState(
     val currentLevel: String = "",
     val profilePictureUrl: String? = null,
     val email: String = "",
+    val overallAccuracy: Float = 0f,
     val isLoading: Boolean = false,
     val isSuccess: Boolean = false,
     val errorMessage: String? = null,

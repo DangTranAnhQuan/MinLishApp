@@ -21,26 +21,47 @@ class CalculateSm2NextReviewUseCase @Inject constructor() {
         grade: ReviewGrade,
         nowMs: Long = System.currentTimeMillis()
     ): Card {
-        val q = grade.qualityScore
-        val mappedQuality = q * 1.6 + 0.2
-
         var repetitions = card.sm2Repetitions
         var interval = card.sm2Interval
         var easeFactor = card.sm2EaseFactor
 
-        if (q >= 2) {
-            interval = when (repetitions) {
-                0 -> 1
-                1 -> 6
-                else -> max(1, (interval * easeFactor).roundToInt())
+        when (grade) {
+            ReviewGrade.AGAIN -> {
+                repetitions = 0
+                interval = 1
+                easeFactor -= 0.2
             }
-            repetitions += 1
-        } else {
-            repetitions = 0
-            interval = 1
+
+            ReviewGrade.HARD -> {
+                interval = when (repetitions) {
+                    0 -> 1
+                    1 -> 3
+                    else -> max(1, (interval * 1.2).roundToInt())
+                }
+                repetitions += 1
+                easeFactor -= 0.15
+            }
+
+            ReviewGrade.GOOD -> {
+                interval = when (repetitions) {
+                    0 -> 1
+                    1 -> 6
+                    else -> max(1, (interval * easeFactor).roundToInt())
+                }
+                repetitions += 1
+            }
+
+            ReviewGrade.EASY -> {
+                interval = when (repetitions) {
+                    0 -> 3
+                    1 -> 8
+                    else -> max(1, (interval * easeFactor * 1.3).roundToInt())
+                }
+                repetitions += 1
+                easeFactor += 0.15
+            }
         }
 
-        easeFactor += 0.1 - (5 - mappedQuality) * (0.08 + (5 - mappedQuality) * 0.02)
         if (easeFactor < 1.3) {
             easeFactor = 1.3
         }
@@ -55,5 +76,4 @@ class CalculateSm2NextReviewUseCase @Inject constructor() {
         )
     }
 }
-
 

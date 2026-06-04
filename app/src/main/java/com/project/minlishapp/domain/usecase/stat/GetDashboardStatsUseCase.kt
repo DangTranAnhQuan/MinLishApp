@@ -11,7 +11,7 @@ import javax.inject.Inject
 data class DashboardStats(
     val accuracy: Float,
     val dailyActivityData: List<Float>,
-    val retentionData: List<Float>
+    val retentionData: List<Float?>
 )
 
 class GetDashboardStatsUseCase @Inject constructor(
@@ -19,44 +19,37 @@ class GetDashboardStatsUseCase @Inject constructor(
 ) {
     operator fun invoke(userId: String): Flow<DashboardStats> {
         return repository.getWeeklyStats(userId).map { stats ->
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            val calendar = Calendar.getInstance()
-            
-            val last7Days = (6 downTo 0).map { i ->
-                val cal = Calendar.getInstance()
-                cal.add(Calendar.DAY_OF_YEAR, -i)
-                sdf.format(cal.time)
+            val formatter = java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
+            val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+            val last7Days = (6 downTo 0).map { daysAgo ->
+                val pastDate = today.minusDays(daysAgo.toLong())
+                pastDate.format(formatter)
             }
-            
             val statMap = stats.associateBy { it.date }
-            
-            val dailyActivityData = mutableListOf<Float>()
-            val retentionData = mutableListOf<Float>()
-            
-            var todayAccuracy = 0f
-            
-            val todayStr = sdf.format(calendar.time)
-            val todayStat = statMap[todayStr]
-            if (todayStat != null && todayStat.totalReviews > 0) {
-                todayAccuracy = (todayStat.correctReviews.toFloat() / todayStat.totalReviews) * 100f
-            }
+            val todayStat = statMap[today.format(formatter)]
 
-            for (date in last7Days) {
-                val stat = statMap[date]
-                // Số từ đã học trong 7 ngày gần nhất
-                val activity = stat?.wordsLearned?.toFloat() ?: 0f
-                dailyActivityData.add(activity)
-                
-                // Lượng từ chưa bị quên
-                val retention = stat?.retentionCount?.toFloat() ?: 0f
-                retentionData.add(retention)
-            }
-            
             DashboardStats(
-                accuracy = todayAccuracy,
-                dailyActivityData = dailyActivityData,
-                retentionData = retentionData
+                accuracy = if (todayStat != null && todayStat.totalReviews > 0) {
+                    (todayStat.correctReviews.toFloat() / todayStat.totalReviews) * 100f
+                } else {
+                    0f
+                },
+                dailyActivityData = last7Days.map { date ->
+                    statMap[date]?.totalReviews?.toFloat() ?: 0f
+                },
+                retentionData = last7Days.map { date ->
+                    val stat = statMap[date]
+                    if (stat != null && stat.dueReviewCount > 0) {
+                        (stat.retentionCount.toFloat() / stat.dueReviewCount) * 100f
+                    } else {
+                        null
+                    }
+                }
             )
         }
+    }
+
+    private companion object {
+        const val DATE_FORMAT = "yyyy-MM-dd"
     }
 }

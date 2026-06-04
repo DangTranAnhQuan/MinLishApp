@@ -51,7 +51,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.collectAsState
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.project.minlishapp.presentation.vocabulary.VocabularyViewModel
+import com.project.minlishapp.presentation.vocabulary.*
 
 @Composable
 fun CardManagementScreen(
@@ -81,7 +81,7 @@ fun CardManagementScreen(
                     Icon(Icons.Default.ArrowBack, contentDescription = null)
                 }
                 Text(
-                    text = "Add New Card",
+                    text = if (form.word.isEmpty()) "Add New Card" else "Edit Card",
                     color = Color(0xff1c1b1f),
                     style = TextStyle(
                         fontSize = 20.sp,
@@ -121,7 +121,7 @@ fun CardManagementScreen(
                 }
                 item {
                     FormField(
-                        label = "Definition",
+                        label = "Description (English)",
                         value = form.definition,
                         onValueChange = { newValue -> viewModel.updateCardForm { it.copy(definition = newValue) } },
                         minHeight = 80.dp
@@ -129,7 +129,7 @@ fun CardManagementScreen(
                 }
                 item {
                     FormField(
-                        label = "Example Sentence",
+                        label = "Example",
                         value = form.example,
                         onValueChange = { newValue -> viewModel.updateCardForm { it.copy(example = newValue) } },
                         minHeight = 80.dp
@@ -137,16 +137,24 @@ fun CardManagementScreen(
                 }
                 item {
                     FormField(
-                        label = "Image URL",
-                        value = form.imageUrl,
-                        onValueChange = { newValue -> viewModel.updateCardForm { it.copy(imageUrl = newValue) } }
+                        label = "Collocation",
+                        value = form.collocation,
+                        onValueChange = { newValue -> viewModel.updateCardForm { it.copy(collocation = newValue) } }
                     )
                 }
                 item {
                     FormField(
-                        label = "Audio URL",
-                        value = form.audioUrl,
-                        onValueChange = { newValue -> viewModel.updateCardForm { it.copy(audioUrl = newValue) } }
+                        label = "Related Words",
+                        value = form.relatedWords,
+                        onValueChange = { newValue -> viewModel.updateCardForm { it.copy(relatedWords = newValue) } }
+                    )
+                }
+                item {
+                    FormField(
+                        label = "Note",
+                        value = form.note,
+                        onValueChange = { newValue -> viewModel.updateCardForm { it.copy(note = newValue) } },
+                        minHeight = 80.dp
                     )
                 }
                 item {
@@ -155,6 +163,16 @@ fun CardManagementScreen(
                         value = form.tags,
                         onValueChange = { newValue -> viewModel.updateCardForm { it.copy(tags = newValue) } }
                     )
+                }
+
+                uiState.errorMessage?.let { message ->
+                    item {
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
                 
                 item {
@@ -169,10 +187,7 @@ fun CardManagementScreen(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(20.dp)
-                .clickable { 
-                    viewModel.saveCard(deckId)
-                    onBack()
-                },
+                .clickable { viewModel.saveCard(deckId, onSaved = onBack) },
             shape = RoundedCornerShape(24.dp),
             color = Color(0xff0061ff),
             shadowElevation = 8.dp

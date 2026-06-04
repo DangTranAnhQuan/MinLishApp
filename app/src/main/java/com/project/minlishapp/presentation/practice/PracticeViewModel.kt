@@ -4,101 +4,237 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.minlishapp.domain.model.Card
+import com.project.minlishapp.domain.model.Deck
+import com.project.minlishapp.domain.model.PracticeAttempt
+import com.project.minlishapp.domain.model.PracticeQuizType
+import com.project.minlishapp.domain.model.PracticeSessionMode
+import com.project.minlishapp.domain.repository.AuthRepository
 import com.project.minlishapp.domain.repository.CardRepository
+import com.project.minlishapp.domain.repository.DeckRepository
+import com.project.minlishapp.domain.repository.PracticeRepository
+import com.project.minlishapp.domain.usecase.quiz.ApplyPracticeAnswerUseCase
+import com.project.minlishapp.domain.usecase.quiz.BuildPracticeQueueUseCase
 import com.project.minlishapp.domain.usecase.quiz.FillInBlankQuestion
 import com.project.minlishapp.domain.usecase.quiz.GenerateQuizUseCase
 import com.project.minlishapp.domain.usecase.quiz.MultipleChoiceQuestion
+import com.project.minlishapp.domain.usecase.srs.GetReviewScheduleUseCase
+import com.project.minlishapp.domain.usecase.srs.GetReviewForecastUseCase
+import com.project.minlishapp.domain.usecase.srs.ReviewForecastBucket
+import com.project.minlishapp.domain.usecase.srs.ReviewGrade
+import com.project.minlishapp.domain.usecase.srs.ReviewSchedule
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Date
+import java.util.UUID
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class PracticeViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val cardRepository: CardRepository,
-    private val generateQuizUseCase: GenerateQuizUseCase
+    private val deckRepository: DeckRepository,
+    private val authRepository: AuthRepository,
+    private val practiceRepository: PracticeRepository,
+    private val generateQuizUseCase: GenerateQuizUseCase,
+    private val buildPracticeQueueUseCase: BuildPracticeQueueUseCase,
+    private val applyPracticeAnswerUseCase: ApplyPracticeAnswerUseCase,
+    private val getReviewScheduleUseCase: GetReviewScheduleUseCase,
+    private val getReviewForecastUseCase: GetReviewForecastUseCase
 ) : ViewModel() {
 
-    private val deckId: String = savedStateHandle.get<String>("deckId").orEmpty()
+    private val initialDeckId = savedStateHandle.get<String>("deckId")
+        .orEmpty()
+        .takeUnless { it == DEBUG_DECK_ID }
+        .orEmpty()
+    private var pendingSubmission: PendingPracticeSubmission? = null
+    private val savingSubmissionIds = mutableSetOf<String>()
 
-    private val _uiState = MutableStateFlow(PracticeUiState(deckId = deckId))
+    private val _uiState = MutableStateFlow(
+        PracticeUiState(
+            selectedDeckId = initialDeckId,
+            sessionMode = if (initialDeckId.isBlank()) {
+                PracticeSessionMode.SPACED_REPETITION
+            } else {
+                PracticeSessionMode.DECK_PRACTICE
+            }
+        )
+    )
     val uiState: StateFlow<PracticeUiState> = _uiState.asStateFlow()
 
     init {
-        if (deckId.isBlank()) {
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    errorMessage = "Thiếu deckId để tải bài luyện tập."
-                )
-            }
-        } else {
-            observeDeckCards()
+        observePracticeData()
+    }
+
+    private fun observePracticeData() {
+        viewModelScope.launch {
+            authRepository.currentUser
+                .flatMapLatest { user ->
+                    val userId = user?.uid.orEmpty()
+                    if (userId.isBlank()) {
+                        flowOf(PracticeData())
+                    } else {
+                        combine(
+                            deckRepository.getDecks(userId),
+                            cardRepository.getCardsByUser(userId)
+                        ) { decks, cards ->
+                            PracticeData(userId = userId, decks = decks, cards = cards)
+                        }
+                    }
+                }
+                .catch { throwable ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = throwable.localizedMessage
+                                ?: "Không thể tải dữ liệu luyện tập."
+                        )
+                    }
+                }
+                .collect { data ->
+                    _uiState.update { currentState ->
+                        val selectedDeckId = currentState.selectedDeckId
+                            .takeIf { id -> data.decks.any { it.id == id } }
+                            .orEmpty()
+                        refreshSetupDetails(
+                            currentState.copy(
+                                userId = data.userId,
+                                decks = data.decks,
+                                userCards = data.cards,
+                                selectedDeckId = selectedDeckId,
+                                isLoading = false,
+                                errorMessage = null
+                            )
+                        )
+                    }
+                }
         }
     }
 
-    private fun observeDeckCards() {
-        viewModelScope.launch {
-            runCatching {
-                combine(
-                    cardRepository.getCardsInDeck(deckId),
-                    cardRepository.getAllCards()
-                ) { deckCards, systemCards ->
-                    deckCards to systemCards
-                }.collectLatest { (deckCards, systemCards) ->
-                    _uiState.update {
-                        it.copy(
-                            cards = deckCards,
-                            systemCards = systemCards,
-                            isLoading = false,
-                            errorMessage = null
-                        )
-                    }
-                    showNextQuestion()
-                }
-            }.onFailure { throwable ->
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = throwable.localizedMessage
-                            ?: "Không thể tải dữ liệu bài luyện tập."
-                    )
-                }
-            }
+    fun selectDeck(deckId: String) {
+        if (_uiState.value.phase != PracticePhase.SETUP) return
+        _uiState.update {
+            refreshSetupDetails(
+                it.copy(
+                    selectedDeckId = deckId,
+                    setupMessage = null
+                )
+            )
+        }
+    }
+
+    fun selectSessionMode(sessionMode: PracticeSessionMode) {
+        if (_uiState.value.phase != PracticePhase.SETUP) return
+        _uiState.update {
+            refreshSetupDetails(
+                it.copy(
+                    sessionMode = sessionMode,
+                    reviewMode = if (sessionMode == PracticeSessionMode.SPACED_REPETITION) {
+                        PracticeReviewMode.OFFICIAL
+                    } else {
+                        it.reviewMode
+                    },
+                    setupMessage = null
+                )
+            )
         }
     }
 
     fun selectQuizType(quizType: QuizType) {
-        if (_uiState.value.quizType != quizType) {
-            _uiState.update { it.copy(quizType = quizType) }
-            showNextQuestion()
+        if (_uiState.value.phase != PracticePhase.SETUP) return
+        _uiState.update {
+            refreshSetupDetails(
+                it.copy(
+                    quizType = quizType,
+                    setupMessage = null
+                )
+            )
         }
+    }
+
+    fun selectReviewMode(reviewMode: PracticeReviewMode) {
+        val state = _uiState.value
+        if (state.phase != PracticePhase.SETUP) return
+        if (state.sessionMode == PracticeSessionMode.SPACED_REPETITION) return
+
+        _uiState.update {
+            refreshSetupDetails(
+                it.copy(
+                    reviewMode = reviewMode,
+                    setupMessage = null
+                )
+            )
+        }
+    }
+
+    fun startSession() {
+        val state = _uiState.value
+        if (state.userId.isBlank()) {
+            _uiState.update { it.copy(setupMessage = "Bạn cần đăng nhập để bắt đầu luyện tập.") }
+            return
+        }
+        if (state.quizType == QuizType.FLASHCARD) {
+            _uiState.update { it.copy(setupMessage = "Hãy dùng nút Flashcard để mở màn lật thẻ.") }
+            return
+        }
+        if (state.sessionMode == PracticeSessionMode.DECK_PRACTICE && state.selectedDeckId.isBlank()) {
+            _uiState.update { it.copy(setupMessage = "Hãy chọn một bộ từ trước khi bắt đầu.") }
+            return
+        }
+
+        val queueCardIds = buildPracticeQueueUseCase(
+            cards = state.practiceCards,
+            distractorCards = distractorCardsFor(state),
+            quizType = state.quizType.toDomain(),
+            sessionMode = state.sessionMode,
+            currentTimeMs = System.currentTimeMillis()
+        )
+        if (queueCardIds.isEmpty()) {
+            _uiState.update { it.copy(setupMessage = unavailableMessage(state)) }
+            return
+        }
+
+        pendingSubmission = null
+        _uiState.update {
+            it.copy(
+                phase = PracticePhase.IN_PROGRESS,
+                sessionId = UUID.randomUUID().toString(),
+                queueCardIds = queueCardIds,
+                currentQuestionIndex = 0,
+                correctAnswerCount = 0,
+                incorrectAnswerCount = 0,
+                setupMessage = null
+            ).clearedAnswer()
+        }
+        showCurrentQuestion()
     }
 
     fun selectMultipleChoiceAnswer(answer: String) {
         val state = _uiState.value
         val question = state.multipleChoiceQuestion ?: return
-        if (state.feedback != null) return
+        if (state.phase != PracticePhase.IN_PROGRESS || state.feedback != null) return
 
-        _uiState.update {
-            it.copy(
-                selectedMultipleChoiceAnswer = answer,
-                feedback = if (answer == question.correctAnswer) {
-                    AnswerFeedback.CORRECT
-                } else {
-                    AnswerFeedback.INCORRECT
-                }
-            )
-        }
+        submitAnswer(
+            feedback = if (answer == question.correctAnswer) {
+                AnswerFeedback.CORRECT
+            } else {
+                AnswerFeedback.INCORRECT
+            },
+            selectedMultipleChoiceAnswer = answer
+        )
     }
 
     fun onFillInBlankAnswerChange(answer: String) {
+        if (_uiState.value.feedback != null) return
         _uiState.update {
             it.copy(
                 fillInBlankAnswer = answer,
@@ -110,109 +246,418 @@ class PracticeViewModel @Inject constructor(
     fun checkFillInBlankAnswer() {
         val state = _uiState.value
         val question = state.fillInBlankQuestion ?: return
-        val answer = state.fillInBlankAnswer.trim()
+        if (state.phase != PracticePhase.IN_PROGRESS || state.feedback != null) return
 
+        val answer = state.fillInBlankAnswer.trim()
         if (answer.isBlank()) {
+            _uiState.update { it.copy(answerErrorMessage = "Hãy nhập từ cần điền.") }
+            return
+        }
+
+        submitAnswer(
+            feedback = if (answer.equals(question.correctAnswer, ignoreCase = true)) {
+                AnswerFeedback.CORRECT
+            } else {
+                AnswerFeedback.INCORRECT
+            }
+        )
+    }
+
+    fun continueSession() {
+        val state = _uiState.value
+        if (state.phase != PracticePhase.IN_PROGRESS || !state.isResultSaved) return
+
+        if (state.isLastQuestion) {
             _uiState.update {
-                it.copy(answerErrorMessage = "Hãy nhập từ cần điền.")
+                it.copy(
+                    phase = PracticePhase.COMPLETED,
+                    multipleChoiceQuestion = null,
+                    fillInBlankQuestion = null
+                ).clearedAnswer()
             }
             return
         }
 
         _uiState.update {
+            it.copy(currentQuestionIndex = it.currentQuestionIndex + 1).clearedAnswer()
+        }
+        showCurrentQuestion()
+    }
+
+    fun retrySaveResult() {
+        pendingSubmission?.let(::persistPracticeSubmission)
+    }
+
+    fun reviewCurrentAnswer(grade: ReviewGrade) {
+        val state = _uiState.value
+        if (
+            state.phase != PracticePhase.IN_PROGRESS ||
+            state.feedback == null ||
+            state.selectedReviewGrade != null
+        ) {
+            return
+        }
+
+        val cardId = when (state.quizType) {
+            QuizType.FLASHCARD -> null
+            QuizType.MULTIPLE_CHOICE -> state.multipleChoiceQuestion?.cardId
+            QuizType.FILL_IN_THE_BLANK -> state.fillInBlankQuestion?.cardId
+        } ?: return
+        val effectiveGrade = grade.constrainedBy(state.feedback)
+
+        if (state.isOfficialReview) {
+            _uiState.update { it.copy(selectedReviewGrade = effectiveGrade) }
+            savePracticeAttempt(cardId, state.feedback, effectiveGrade)
+        } else {
+            pendingSubmission = null
+            _uiState.update {
+                it.copy(
+                    selectedReviewGrade = effectiveGrade,
+                    isSavingResult = false,
+                    isResultSaved = true,
+                    resultSaveErrorMessage = null,
+                    lastReviewIntervalDays = null,
+                    lastEaseFactor = null,
+                    lastNextReviewTime = null
+                )
+            }
+        }
+    }
+
+    fun restartSession() {
+        if (_uiState.value.phase != PracticePhase.COMPLETED) return
+        startSession()
+    }
+
+    fun returnToSetup() {
+        if (_uiState.value.phase == PracticePhase.SETUP) return
+        pendingSubmission = null
+        _uiState.update {
+            refreshSetupDetails(
+                it.copy(
+                    phase = PracticePhase.SETUP,
+                    sessionId = "",
+                    queueCardIds = emptyList(),
+                    currentQuestionIndex = 0,
+                    correctAnswerCount = 0,
+                    incorrectAnswerCount = 0,
+                    multipleChoiceQuestion = null,
+                    fillInBlankQuestion = null
+                ).clearedAnswer()
+            )
+        }
+    }
+
+    private fun submitAnswer(
+        feedback: AnswerFeedback,
+        selectedMultipleChoiceAnswer: String? = null
+    ) {
+        _uiState.update {
             it.copy(
-                feedback = if (answer.equals(question.correctAnswer, ignoreCase = true)) {
-                    AnswerFeedback.CORRECT
-                } else {
-                    AnswerFeedback.INCORRECT
-                },
+                selectedMultipleChoiceAnswer = selectedMultipleChoiceAnswer,
+                feedback = feedback,
+                correctAnswerCount = it.correctAnswerCount + if (feedback == AnswerFeedback.CORRECT) 1 else 0,
+                incorrectAnswerCount = it.incorrectAnswerCount + if (feedback == AnswerFeedback.INCORRECT) 1 else 0,
+                isSavingResult = false,
+                isResultSaved = false,
+                resultSaveErrorMessage = null,
                 answerErrorMessage = null
             )
         }
     }
 
-    fun showNextQuestion() {
-        when (_uiState.value.quizType) {
-            QuizType.MULTIPLE_CHOICE -> showNextMultipleChoiceQuestion()
-            QuizType.FILL_IN_THE_BLANK -> showNextFillInBlankQuestion()
+    private fun showCurrentQuestion() {
+        val state = _uiState.value
+        val cardId = state.queueCardIds.getOrNull(state.currentQuestionIndex) ?: return
+        val card = state.practiceCards.firstOrNull { it.id == cardId } ?: return
+
+        _uiState.update {
+            when (it.quizType) {
+                QuizType.FLASHCARD -> it
+
+                QuizType.MULTIPLE_CHOICE -> it.copy(
+                    multipleChoiceQuestion = generateQuizUseCase.generateMultipleChoiceForCard(
+                        answerCard = card,
+                        distractorCards = distractorCardsFor(it)
+                    ),
+                    fillInBlankQuestion = null
+                )
+
+                QuizType.FILL_IN_THE_BLANK -> it.copy(
+                    multipleChoiceQuestion = null,
+                    fillInBlankQuestion = generateQuizUseCase.generateFillInBlankForCard(card)
+                )
+            }
         }
     }
 
-    private fun showNextMultipleChoiceQuestion() {
+    private fun savePracticeAttempt(
+        cardId: String,
+        feedback: AnswerFeedback,
+        grade: ReviewGrade
+    ) {
         val state = _uiState.value
-        val eligibleQuestionCount = generateQuizUseCase.countMultipleChoiceQuestions(
-            cards = state.cards,
-            distractorCards = state.systemCards
+        if (state.userId.isBlank() || state.sessionId.isBlank()) {
+            _uiState.update {
+                it.copy(
+                    selectedReviewGrade = null,
+                    isSavingResult = false,
+                    isResultSaved = false,
+                    resultSaveErrorMessage = "Không thể xác định phiên luyện tập để lưu kết quả."
+                )
+            }
+            return
+        }
+
+        val currentCard = state.practiceCards.firstOrNull { it.id == cardId }
+        if (currentCard == null) {
+            _uiState.update {
+                it.copy(
+                    selectedReviewGrade = null,
+                    isSavingResult = false,
+                    isResultSaved = false,
+                    resultSaveErrorMessage = "Không tìm thấy thẻ để cập nhật lịch ôn tập."
+                )
+            }
+            return
+        }
+
+        val reviewResult = applyPracticeAnswerUseCase(
+            card = currentCard,
+            grade = grade
         )
-        val question = generateQuizUseCase.generateMultipleChoice(
-            cards = state.cards,
-            distractorCards = state.systemCards,
-            excludedCardId = state.multipleChoiceQuestion?.cardId
+        val answeredAt = Date()
+        val isCorrect = feedback == AnswerFeedback.CORRECT
+        val attempt = PracticeAttempt(
+            id = UUID.randomUUID().toString(),
+            sessionId = state.sessionId,
+            userId = state.userId,
+            deckId = currentCard.deckId,
+            cardId = cardId,
+            quizType = state.quizType.toDomain(),
+            sessionMode = state.sessionMode,
+            isCorrect = isCorrect,
+            qualityScore = reviewResult.grade.qualityScore,
+            sm2IntervalDays = reviewResult.reviewedCard.sm2Interval,
+            sm2EaseFactor = reviewResult.reviewedCard.sm2EaseFactor,
+            nextReviewTime = reviewResult.reviewedCard.nextReviewTime,
+            isDueReview = currentCard.sm2Interval > 0 &&
+                currentCard.nextReviewTime.time <= answeredAt.time,
+            isFirstTimeLearned = currentCard.sm2Interval == 0 && isCorrect && grade.isLearned,
+            answeredAt = answeredAt
         )
+        val submission = PendingPracticeSubmission(
+            attempt = attempt,
+            reviewedCard = reviewResult.reviewedCard
+        )
+        pendingSubmission = submission
+        applyPracticeSubmissionOptimistically(submission)
+        persistPracticeSubmission(submission)
+    }
+
+    private fun applyPracticeSubmissionOptimistically(submission: PendingPracticeSubmission) {
         _uiState.update {
-            it.copy(
-                multipleChoiceQuestion = question,
-                fillInBlankQuestion = null,
-                selectedMultipleChoiceAnswer = null,
-                fillInBlankAnswer = "",
-                feedback = null,
-                hasAlternativeQuestion = eligibleQuestionCount > 1,
-                answerErrorMessage = null,
-                questionMessage = when {
-                    question == null && it.cards.isNotEmpty() -> {
-                        "Cần ít nhất 4 nghĩa khác nhau để tạo câu hỏi trắc nghiệm. " +
-                            "Firestore hiện có ${countDistinctMeanings(it.systemCards)} nghĩa hợp lệ."
-                    }
-                    eligibleQuestionCount == 1 -> {
-                        "Hiện chỉ có 1 câu trắc nghiệm hợp lệ. Hãy thêm thẻ để luyện tập nhiều câu hơn."
-                    }
-                    else -> null
-                }
+            val updatedUserCards = it.userCards.replaceCard(submission.reviewedCard)
+            refreshSetupDetails(
+                it.copy(
+                    userCards = updatedUserCards,
+                    isSavingResult = true,
+                    isResultSaved = true,
+                    resultSaveErrorMessage = null,
+                    lastReviewIntervalDays = submission.reviewedCard.sm2Interval,
+                    lastEaseFactor = submission.reviewedCard.sm2EaseFactor,
+                    lastNextReviewTime = submission.reviewedCard.nextReviewTime
+                )
             )
         }
     }
 
-    private fun countDistinctMeanings(cards: List<Card>): Int {
-        return cards
-            .map { it.meaning.trim() }
+    private fun persistPracticeSubmission(submission: PendingPracticeSubmission) {
+        if (!savingSubmissionIds.add(submission.attempt.id)) return
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isSavingResult = true,
+                    resultSaveErrorMessage = null
+                )
+            }
+            runCatching {
+                practiceRepository.saveReviewedAttempt(
+                    attempt = submission.attempt,
+                    reviewedCard = submission.reviewedCard
+                )
+            }.onSuccess {
+                savingSubmissionIds.remove(submission.attempt.id)
+                if (pendingSubmission?.attempt?.id == submission.attempt.id) {
+                    pendingSubmission = null
+                }
+                _uiState.update {
+                    it.copy(
+                        isSavingResult = savingSubmissionIds.isNotEmpty(),
+                        resultSaveErrorMessage = null
+                    )
+                }
+            }.onFailure { throwable ->
+                savingSubmissionIds.remove(submission.attempt.id)
+                pendingSubmission = submission
+                _uiState.update {
+                    it.copy(
+                        isSavingResult = savingSubmissionIds.isNotEmpty(),
+                        isResultSaved = true,
+                        resultSaveErrorMessage = throwable.localizedMessage
+                            ?: "Không thể lưu kết quả luyện tập."
+                    )
+                }
+            }
+        }
+    }
+
+    private fun refreshSetupDetails(state: PracticeUiState): PracticeUiState {
+        val learnedCards = state.userCards.filter { it.sm2Interval > 0 }
+        val practiceCards = when (state.sessionMode) {
+            PracticeSessionMode.SPACED_REPETITION -> learnedCards
+            PracticeSessionMode.DECK_PRACTICE -> {
+                state.userCards.filter { it.deckId == state.selectedDeckId }
+            }
+        }
+        val distractorCards = distractorCardsFor(state.copy(practiceCards = practiceCards))
+        val eligibleCards = when (state.quizType) {
+            QuizType.FLASHCARD -> practiceCards.filter { it.word.isNotBlank() }
+
+            QuizType.MULTIPLE_CHOICE -> {
+                generateQuizUseCase.eligibleMultipleChoiceCards(practiceCards, distractorCards)
+            }
+
+            QuizType.FILL_IN_THE_BLANK -> {
+                generateQuizUseCase.eligibleFillInBlankCards(practiceCards)
+            }
+        }
+            .distinctBy { it.id }
+            .sortedBy { it.nextReviewTime.time }
+            .distinctBy { it.word.trim().lowercase() }
+        val now = System.currentTimeMillis()
+
+        return state.copy(
+            practiceCards = practiceCards,
+            availableQuestionCount = eligibleCards.size,
+            sessionQuestionCount = buildPracticeQueueUseCase(
+                cards = practiceCards,
+                distractorCards = distractorCards,
+                quizType = state.quizType.toDomain(),
+                sessionMode = state.sessionMode,
+                currentTimeMs = now
+            ).size,
+            newWordsCount = practiceCards.count { it.sm2Interval == 0 },
+            reviewSchedule = getReviewScheduleUseCase(learnedCards, now),
+            reviewForecast = getReviewForecastUseCase(learnedCards, now)
+        )
+    }
+
+    private fun distractorCardsFor(state: PracticeUiState): List<Card> {
+        val distinctPracticeMeanings = state.practiceCards
+            .map { it.meaning.trim().lowercase() }
             .filter { it.isNotBlank() }
-            .distinctBy { it.lowercase() }
+            .distinct()
             .size
+        return if (distinctPracticeMeanings >= REQUIRED_MULTIPLE_CHOICE_MEANINGS) {
+            state.practiceCards
+        } else {
+            state.userCards
+        }
     }
 
-    private fun showNextFillInBlankQuestion() {
-        val state = _uiState.value
-        val eligibleQuestionCount = generateQuizUseCase.countFillInBlankQuestions(state.cards)
-        val question = generateQuizUseCase.generateFillInBlank(
-            cards = state.cards,
-            excludedCardId = state.fillInBlankQuestion?.cardId
+    private fun unavailableMessage(state: PracticeUiState): String {
+        val scopeMessage = when (state.sessionMode) {
+            PracticeSessionMode.SPACED_REPETITION -> "Không có từ đã học đến hạn"
+            PracticeSessionMode.DECK_PRACTICE -> "Không có từ hợp lệ trong bộ từ đã chọn"
+        }
+        return when (state.quizType) {
+            QuizType.FLASHCARD -> {
+                "$scopeMessage cho Flashcard."
+            }
+
+            QuizType.MULTIPLE_CHOICE -> {
+                "$scopeMessage hoặc chưa đủ dữ liệu cho câu trắc nghiệm. Cần ít nhất 4 nghĩa khác nhau trong kho từ của bạn."
+            }
+
+            QuizType.FILL_IN_THE_BLANK -> {
+                "$scopeMessage cho bài điền từ. Bài điền từ cần câu ví dụ chứa chính từ khóa."
+            }
+        }
+    }
+
+    private fun PracticeUiState.clearedAnswer(): PracticeUiState {
+        return copy(
+            selectedMultipleChoiceAnswer = null,
+            fillInBlankAnswer = "",
+            feedback = null,
+            selectedReviewGrade = null,
+            isSavingResult = false,
+            isResultSaved = false,
+            resultSaveErrorMessage = null,
+            lastReviewIntervalDays = null,
+            lastEaseFactor = null,
+            lastNextReviewTime = null,
+            answerErrorMessage = null
         )
-        _uiState.update {
-            it.copy(
-                multipleChoiceQuestion = null,
-                fillInBlankQuestion = question,
-                selectedMultipleChoiceAnswer = null,
-                fillInBlankAnswer = "",
-                feedback = null,
-                hasAlternativeQuestion = eligibleQuestionCount > 1,
-                answerErrorMessage = null,
-                questionMessage = when {
-                    question == null && it.cards.isNotEmpty() -> {
-                        "Cần ít nhất 1 thẻ có câu ví dụ chứa từ khóa để tạo bài điền từ."
-                    }
-                    eligibleQuestionCount == 1 -> {
-                        "Hiện chỉ có 1 câu điền từ hợp lệ. Hãy thêm thẻ để luyện tập nhiều câu hơn."
-                    }
-                    else -> null
-                }
-            )
+    }
+
+    private fun List<Card>.replaceCard(updatedCard: Card): List<Card> {
+        return map { card -> if (card.id == updatedCard.id) updatedCard else card }
+    }
+
+    private fun ReviewGrade.constrainedBy(feedback: AnswerFeedback): ReviewGrade {
+        return if (feedback == AnswerFeedback.INCORRECT && qualityScore > ReviewGrade.HARD.qualityScore) {
+            ReviewGrade.HARD
+        } else {
+            this
+        }
+    }
+
+    private val ReviewGrade.isLearned: Boolean
+        get() = qualityScore >= ReviewGrade.GOOD.qualityScore
+
+    private companion object {
+        const val DEBUG_DECK_ID = "debug_deck"
+        const val REQUIRED_MULTIPLE_CHOICE_MEANINGS = 4
+    }
+}
+
+private data class PracticeData(
+    val userId: String = "",
+    val decks: List<Deck> = emptyList(),
+    val cards: List<Card> = emptyList()
+)
+
+private data class PendingPracticeSubmission(
+    val attempt: PracticeAttempt,
+    val reviewedCard: Card
+)
+
+enum class PracticePhase {
+    SETUP,
+    IN_PROGRESS,
+    COMPLETED
+}
+
+enum class QuizType {
+    FLASHCARD,
+    MULTIPLE_CHOICE,
+    FILL_IN_THE_BLANK;
+
+    fun toDomain(): PracticeQuizType {
+        return when (this) {
+            FLASHCARD -> PracticeQuizType.FLASHCARD
+            MULTIPLE_CHOICE -> PracticeQuizType.MULTIPLE_CHOICE
+            FILL_IN_THE_BLANK -> PracticeQuizType.FILL_IN_THE_BLANK
         }
     }
 }
 
-enum class QuizType {
-    MULTIPLE_CHOICE,
-    FILL_IN_THE_BLANK
+enum class PracticeReviewMode(val routeValue: String) {
+    OFFICIAL("official"),
+    FREE_PRACTICE("free")
 }
 
 enum class AnswerFeedback {
@@ -221,18 +666,77 @@ enum class AnswerFeedback {
 }
 
 data class PracticeUiState(
-    val deckId: String = "",
-    val cards: List<Card> = emptyList(),
-    val systemCards: List<Card> = emptyList(),
-    val quizType: QuizType = QuizType.MULTIPLE_CHOICE,
+    val userId: String = "",
+    val decks: List<Deck> = emptyList(),
+    val userCards: List<Card> = emptyList(),
+    val selectedDeckId: String = "",
+    val practiceCards: List<Card> = emptyList(),
+    val sessionMode: PracticeSessionMode = PracticeSessionMode.SPACED_REPETITION,
+    val reviewMode: PracticeReviewMode = PracticeReviewMode.OFFICIAL,
+    val quizType: QuizType = QuizType.FLASHCARD,
+    val phase: PracticePhase = PracticePhase.SETUP,
+    val sessionId: String = "",
+    val queueCardIds: List<String> = emptyList(),
+    val currentQuestionIndex: Int = 0,
+    val availableQuestionCount: Int = 0,
+    val sessionQuestionCount: Int = 0,
+    val newWordsCount: Int = 0,
+    val correctAnswerCount: Int = 0,
+    val incorrectAnswerCount: Int = 0,
     val multipleChoiceQuestion: MultipleChoiceQuestion? = null,
     val fillInBlankQuestion: FillInBlankQuestion? = null,
     val selectedMultipleChoiceAnswer: String? = null,
     val fillInBlankAnswer: String = "",
     val feedback: AnswerFeedback? = null,
-    val hasAlternativeQuestion: Boolean = false,
+    val selectedReviewGrade: ReviewGrade? = null,
+    val isSavingResult: Boolean = false,
+    val isResultSaved: Boolean = false,
+    val resultSaveErrorMessage: String? = null,
+    val lastReviewIntervalDays: Int? = null,
+    val lastEaseFactor: Double? = null,
+    val lastNextReviewTime: java.util.Date? = null,
+    val reviewSchedule: ReviewSchedule = ReviewSchedule(),
+    val reviewForecast: List<ReviewForecastBucket> = emptyList(),
     val isLoading: Boolean = true,
-    val questionMessage: String? = null,
+    val setupMessage: String? = null,
     val answerErrorMessage: String? = null,
     val errorMessage: String? = null
-)
+) {
+    val selectedDeck: Deck?
+        get() = decks.firstOrNull { it.id == selectedDeckId }
+
+    val sessionTitle: String
+        get() = when (sessionMode) {
+            PracticeSessionMode.SPACED_REPETITION -> "Ôn theo lịch SM-2"
+            PracticeSessionMode.DECK_PRACTICE -> selectedDeck?.title.orEmpty()
+        }
+
+    val canStartSession: Boolean
+        get() = sessionQuestionCount > 0 &&
+            (sessionMode == PracticeSessionMode.SPACED_REPETITION || selectedDeck != null)
+
+    val isOfficialReview: Boolean
+        get() = sessionMode == PracticeSessionMode.SPACED_REPETITION ||
+            reviewMode == PracticeReviewMode.OFFICIAL
+
+    val allowedReviewGrades: Set<ReviewGrade>
+        get() = when (feedback) {
+            AnswerFeedback.INCORRECT -> setOf(ReviewGrade.AGAIN, ReviewGrade.HARD)
+            else -> ReviewGrade.entries.toSet()
+        }
+
+    val completedAnswerCount: Int
+        get() = correctAnswerCount + incorrectAnswerCount
+
+    val totalQuestionCount: Int
+        get() = queueCardIds.size
+
+    val isLastQuestion: Boolean
+        get() = totalQuestionCount > 0 && currentQuestionIndex == totalQuestionCount - 1
+
+    val hasUnsavedResult: Boolean
+        get() = feedback != null && !isResultSaved
+
+    val progress: Float
+        get() = if (totalQuestionCount == 0) 0f else completedAnswerCount.toFloat() / totalQuestionCount
+}

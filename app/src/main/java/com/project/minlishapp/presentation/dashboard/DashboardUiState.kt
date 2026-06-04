@@ -5,7 +5,7 @@ data class DashboardUiState(
     val currentStreak: Int = 0,
     val accuracy: Float = 0f,
     val dailyActivityData: List<Float> = emptyList(),
-    val retentionData: List<Float> = emptyList()
+    val retentionData: List<Float?> = emptyList()
 ) {
     val level: Level
         get() = when {
