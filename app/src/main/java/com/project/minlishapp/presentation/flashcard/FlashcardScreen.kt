@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
@@ -40,6 +41,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -48,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.project.minlishapp.core.utils.TextToSpeechHelper
 import com.project.minlishapp.domain.usecase.srs.ReviewGrade
 import com.project.minlishapp.ui.theme.DarkText
 import com.project.minlishapp.ui.theme.GrayText
@@ -79,6 +83,14 @@ fun FlashcardScreen(
     val currentCard = uiState.cards.getOrNull(uiState.currentCardIndex)
     val rotation = remember { Animatable(0f) }
     val density = LocalDensity.current
+    val context = LocalContext.current
+    val ttsHelper = remember { TextToSpeechHelper(context) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            ttsHelper.shutdown()
+        }
+    }
 
     LaunchedEffect(uiState.isFlipped, currentCard?.id) {
         if (uiState.isFlipped) {
@@ -244,7 +256,8 @@ fun FlashcardScreen(
                                             example = currentCard.example,
                                             collocation = currentCard.collocation,
                                             relatedWords = currentCard.relatedWords,
-                                            note = currentCard.note
+                                            note = currentCard.note,
+                                            onSpeak = { ttsHelper.speak(currentCard.word) }
                                         )
                                     }
                                 }
@@ -473,7 +486,8 @@ private fun BackFace(
     example: String,
     collocation: String,
     relatedWords: String,
-    note: String
+    note: String,
+    onSpeak: () -> Unit
 ) {
     val hasDetails = listOf(
         meaning,
@@ -498,12 +512,30 @@ private fun BackFace(
             lineHeight = 1.11.em,
             style = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold)
         )
-        Text(
-            text = pronunciation,
-            color = GrayText,
-            textAlign = TextAlign.Center,
-            style = TextStyle(fontSize = 14.sp)
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = pronunciation,
+                color = GrayText,
+                textAlign = TextAlign.Center,
+                style = TextStyle(fontSize = 14.sp)
+            )
+            if (pronunciation.isNotBlank() || word.isNotBlank()) {
+                IconButton(
+                    onClick = onSpeak,
+                    modifier = Modifier.padding(start = 4.dp).width(32.dp).height(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = "Speak word",
+                        tint = VibrantBlue,
+                        modifier = Modifier.width(20.dp).height(20.dp)
+                    )
+                }
+            }
+        }
         OptionalDetailRow(label = "Meaning", value = meaning)
         OptionalDetailRow(label = "Description EN", value = descriptionEn)
         OptionalDetailRow(label = "Example", value = example)
@@ -766,7 +798,8 @@ private fun FlashcardPreviewContent(showBackFace: Boolean) {
                             example = example,
                             collocation = collocation,
                             relatedWords = relatedWords,
-                            note = note
+                            note = note,
+                            onSpeak = {}
                         )
                     } else {
                         FrontFace(word = word)

@@ -12,17 +12,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.project.minlishapp.core.utils.TextToSpeechHelper
 import com.project.minlishapp.presentation.vocabulary.*
 import com.project.minlishapp.domain.model.Card
 
@@ -34,8 +37,16 @@ fun CardListScreen(
     viewModel: VocabularyViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val ttsHelper = remember { TextToSpeechHelper(context) }
     var editingCard by remember { mutableStateOf<Card?>(null) }
     var deletingCard by remember { mutableStateOf<Card?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            ttsHelper.shutdown()
+        }
+    }
 
     LaunchedEffect(deckId) {
         viewModel.loadCards(deckId)
@@ -122,7 +133,8 @@ fun CardListScreen(
                         CardItem(
                             card = card,
                             onEdit = { editingCard = card },
-                            onDelete = { deletingCard = card }
+                            onDelete = { deletingCard = card },
+                            onSpeak = { ttsHelper.speak(card.word) }
                         )
                     }
                 }
@@ -147,7 +159,8 @@ fun CardListScreen(
 fun CardItem(
     card: Card,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onSpeak: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -164,22 +177,35 @@ fun CardItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = card.word,
-                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                )
-                if (card.pronunciation.isNotEmpty()) {
-                    Text(
-                        text = card.pronunciation,
-                        style = TextStyle(fontSize = 14.sp, color = Color.Gray)
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onSpeak) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = "Speak word",
+                        tint = Color(0xff0061ff)
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = card.meaning,
-                    style = TextStyle(fontSize = 14.sp)
-                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = card.word,
+                        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    )
+                    if (card.pronunciation.isNotEmpty()) {
+                        Text(
+                            text = card.pronunciation,
+                            style = TextStyle(fontSize = 14.sp, color = Color.Gray)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = card.meaning,
+                        style = TextStyle(fontSize = 14.sp)
+                    )
+                }
             }
             Box {
                 IconButton(onClick = { showMenu = true }) {
