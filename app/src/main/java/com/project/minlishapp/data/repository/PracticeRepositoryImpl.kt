@@ -74,11 +74,15 @@ class PracticeRepositoryImpl @Inject constructor(
                     val lastLearnedDate = userSnapshot.getTimestamp(LAST_LEARNED_DATE_FIELD)?.toDate()
                     val currentStreak = userSnapshot.getLong(CURRENT_STREAK_FIELD)?.toInt() ?: 0
                     
-                    val updatedStreak = calculateNextStreak(
-                        currentStreak = currentStreak,
-                        lastLearnedDate = lastLearnedDate,
-                        answeredAt = now // Dùng biến 'now' đồng nhất
-                    )
+                    val updatedStreak = if (updatedDailyStat.totalReviews >= 5) {
+                        calculateNextStreak(
+                            currentStreak = currentStreak,
+                            lastLearnedDate = lastLearnedDate,
+                            answeredAt = now // Dùng biến 'now' đồng nhất
+                        )
+                    } else {
+                        null
+                    }
                     if (updatedStreak != null) {
                         transaction.set(
                             userDocument,
