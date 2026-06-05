@@ -49,6 +49,7 @@ fun LoginScreen(
     onNavigateToRegister: () -> Unit,
     onLoginSuccess: () -> Unit,
     onNavigateToProfileSetup: () -> Unit,
+    onNavigateToForgotPassword: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AuthViewModel
 ) {
@@ -109,9 +110,8 @@ fun LoginScreen(
         LoginForm(
             uiState = uiState,
             onEmailChange = { viewModel.onEmailChange(it) },
-            onPasswordChange = { viewModel.onPasswordChange(it) }
-//            onEmailChange = onEmailChange,
-//            onPasswordChange = onPasswordChange
+            onPasswordChange = { viewModel.onPasswordChange(it) },
+            onForgotPasswordClick = onNavigateToForgotPassword
         )
         Spacer(modifier = Modifier.weight(1f))
         LoginActions(
@@ -207,7 +207,8 @@ private fun LoginHeader() {
 private fun LoginForm(
     uiState: AuthUiState,
     onEmailChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit
+    onPasswordChange: (String) -> Unit,
+    onForgotPasswordClick: (() -> Unit)? = null
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.Top),
@@ -297,7 +298,9 @@ private fun LoginForm(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    modifier = Modifier.wrapContentHeight(align = Alignment.CenterVertically)
+                    modifier = Modifier
+                        .wrapContentHeight(align = Alignment.CenterVertically)
+                        .clickable(enabled = onForgotPasswordClick != null) { onForgotPasswordClick?.invoke() }
                 )
             }
         }

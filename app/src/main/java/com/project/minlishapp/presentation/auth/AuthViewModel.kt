@@ -255,6 +255,54 @@ class AuthViewModel @Inject constructor(
         _uiState.update { it.copy(errorMessage = null) }
     }
 
+    fun onResetPasswordEmailChange(email: String) {
+        val emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$".toRegex()
+        val isEmailValid = email.matches(emailRegex)
+
+        _uiState.update {
+            it.copy(
+                resetPasswordEmail = email,
+                resetPasswordEmailError = if (email.isEmpty() || isEmailValid) null else "Invalid email format"
+            )
+        }
+    }
+
+    fun sendPasswordResetEmail() {
+        val email = _uiState.value.resetPasswordEmail.trim()
+        if (email.isBlank()) {
+            _uiState.update {
+                it.copy(resetPasswordEmailError = "Email cannot be empty")
+            }
+            return
+        }
+
+        if (_uiState.value.resetPasswordEmailError != null) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isResetPasswordLoading = true, errorMessage = null) }
+            val result = authRepository.sendPasswordResetEmail(email)
+            _uiState.update {
+                it.copy(
+                    isResetPasswordLoading = false,
+                    isResetPasswordSuccess = result.isSuccess,
+                    errorMessage = result.exceptionOrNull()?.localizedMessage
+                )
+            }
+        }
+    }
+
+    fun resetPasswordState() {
+        _uiState.update {
+            it.copy(
+                resetPasswordEmail = "",
+                resetPasswordEmailError = null,
+                isResetPasswordSuccess = false,
+                isResetPasswordLoading = false,
+                errorMessage = null
+            )
+        }
+    }
+
     private fun mapAuthException(e: Throwable?): String? {
         if (e == null) return null
         return when (e) {
@@ -304,5 +352,9 @@ data class AuthUiState(
     val isProfileComplete: Boolean? = null,
     val currentUserEmail: String? = null,
     val learningTargets: List<String> = SharedLearningTargets,
-    val levels: List<LevelInfo> = SharedLevels
+    val levels: List<LevelInfo> = SharedLevels,
+    val resetPasswordEmail: String = "",
+    val resetPasswordEmailError: String? = null,
+    val isResetPasswordSuccess: Boolean = false,
+    val isResetPasswordLoading: Boolean = false
 )

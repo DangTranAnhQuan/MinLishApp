@@ -12,6 +12,7 @@ import com.project.minlishapp.presentation.auth.LearningGoalScreen
 import com.project.minlishapp.presentation.auth.LevelSelectionScreen
 import com.project.minlishapp.presentation.auth.LoginScreen
 import com.project.minlishapp.presentation.auth.RegisterScreen
+import com.project.minlishapp.presentation.auth.ForgotPasswordScreen
 import com.project.minlishapp.presentation.dashboard.DashboardScreen
 import com.project.minlishapp.presentation.flashcard.FlashcardScreen
 import com.project.minlishapp.presentation.practice.QuizScreen
@@ -43,6 +44,9 @@ fun NavGraph(
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 },
+                onNavigateToForgotPassword = {
+                    navController.navigate(Screen.ForgotPassword.route)
+                },
                 viewModel = hiltViewModel()
             )
         }
@@ -59,6 +63,13 @@ fun NavGraph(
                         popUpTo(Screen.Register.route) { inclusive = true }
                     }
                 },
+                viewModel = hiltViewModel()
+            )
+        }
+
+        composable(Screen.ForgotPassword.route) {
+            ForgotPasswordScreen(
+                onNavigateBack = { navController.popBackStack() },
                 viewModel = hiltViewModel()
             )
         }

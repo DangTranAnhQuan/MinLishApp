@@ -7,6 +7,7 @@ interface AuthRepository {
     val currentUser: Flow<FirebaseUser?>
     suspend fun loginWithEmail(email: String, password: String): Result<FirebaseUser>
     suspend fun signUpBasic(email: String, password: String): Result<FirebaseUser>
+    suspend fun sendPasswordResetEmail(email: String): Result<Unit>
     suspend fun completeProfileSetup(
         displayName: String,
         learningTarget: String,

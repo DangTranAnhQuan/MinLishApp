@@ -7,7 +7,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.project.minlishapp.core.notification.NotificationHelper
 import com.project.minlishapp.domain.repository.AuthRepository
-import com.project.minlishapp.domain.use_case.GetDueCardsUseCase
+import com.project.minlishapp.domain.usecase.srs.GetDueCardsUseCase
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
@@ -28,7 +28,7 @@ class DailyReminderWorker @AssistedInject constructor(
                 return Result.success()
             }
 
-            val dueCards = getDueCardsUseCase(currentUser.uid).first()
+            val dueCards = getDueCardsUseCase(currentUser.uid, System.currentTimeMillis()).first()
             val count = dueCards.size
 
             if (count > 0) {
