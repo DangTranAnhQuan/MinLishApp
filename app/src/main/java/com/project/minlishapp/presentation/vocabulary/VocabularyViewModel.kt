@@ -26,9 +26,14 @@ import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
+import org.json.JSONArray
+import org.json.JSONObject
 
 @HiltViewModel
 class VocabularyViewModel @Inject constructor(
@@ -152,7 +157,93 @@ class VocabularyViewModel @Inject constructor(
         _uiState.update { it.copy(cardForm = update(it.cardForm)) }
     }
 
-    fun saveCard(deckId: String, onSaved: () -> Unit = {}) {
+    fun fetchWordDetails(word: String) {
+        if (word.isBlank()) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(cardForm = it.cardForm.copy(isFetching = true), errorMessage = null) }
+            
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val encodedWord = URLEncoder.encode(word.trim(), "UTF-8")
+                    val url = URL("https://api.dictionaryapi.dev/api/v2/entries/en/$encodedWord")
+                    val connection = url.openConnection() as HttpURLConnection
+                    connection.requestMethod = "GET"
+                    connection.setRequestProperty("User-Agent", "MinLishApp/1.0")
+                    connection.connectTimeout = 5000
+                    connection.readTimeout = 5000
+                    
+                    if (connection.responseCode == 200) {
+                        val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                        val response = reader.readText()
+                        reader.close()
+                        
+                        val jsonArray = JSONArray(response)
+                        val entry = jsonArray.getJSONObject(0)
+                        
+                        // Try to get phonetic from different possible locations in API response
+                        var phonetic = entry.optString("phonetic", "")
+                        if (phonetic.isBlank()) {
+                            val phoneticsArr = entry.optJSONArray("phonetics")
+                            if (phoneticsArr != null && phoneticsArr.length() > 0) {
+                                for (i in 0 until phoneticsArr.length()) {
+                                    val pObj = phoneticsArr.getJSONObject(i)
+                                    val text = pObj.optString("text", "")
+                                    if (text.isNotBlank()) {
+                                        phonetic = text
+                                        break
+                                    }
+                                }
+                            }
+                        }
+
+                        val meanings = entry.optJSONArray("meanings")
+                        var definition = ""
+                        var example = ""
+                        
+                        if (meanings != null && meanings.length() > 0) {
+                            val firstMeaning = meanings.getJSONObject(0)
+                            val definitions = firstMeaning.optJSONArray("definitions")
+                            if (definitions != null && definitions.length() > 0) {
+                                val firstDef = definitions.getJSONObject(0)
+                                definition = firstDef.optString("definition", "")
+                                example = firstDef.optString("example", "")
+                            }
+                        }
+                        
+                        Triple(phonetic, definition, example)
+                    } else if (connection.responseCode == 404) {
+                        throw Exception("Word '$word' not found in dictionary.")
+                    } else {
+                        throw Exception("Server error: ${connection.responseCode}")
+                    }
+                }
+            }
+
+            val data = result.getOrNull()
+            if (data != null) {
+                _uiState.update { state ->
+                    state.copy(
+                        cardForm = state.cardForm.copy(
+                            phonetic = if (state.cardForm.phonetic.isBlank()) data.first else state.cardForm.phonetic,
+                            definition = if (state.cardForm.definition.isBlank()) data.second else state.cardForm.definition,
+                            example = if (state.cardForm.example.isBlank()) data.third else state.cardForm.example,
+                            isFetching = false
+                        ),
+                        errorMessage = null
+                    )
+                }
+            } else {
+                val error = result.exceptionOrNull()?.message ?: "Unknown error"
+                _uiState.update { it.copy(
+                    cardForm = it.cardForm.copy(isFetching = false),
+                    errorMessage = error
+                ) }
+            }
+        }
+    }
+
+    fun saveCard(deckId: String, onSaved: (String) -> Unit = {}) {
         val form = _uiState.value.cardForm
         val word = form.word.trim()
         if (word.isBlank()) {
@@ -192,8 +283,9 @@ class VocabularyViewModel @Inject constructor(
                 }
 
                 // Reset form after save
+                val savedWord = word
                 _uiState.update { it.copy(cardForm = CardFormState(), errorMessage = null) }
-                onSaved()
+                onSaved("Saved '$savedWord' successfully!")
             }.onFailure { throwable ->
                 _uiState.update {
                     it.copy(errorMessage = throwable.localizedMessage ?: "Unable to save card.")
@@ -419,5 +511,6 @@ data class CardFormState(
     val note: String = "",
     val imageUrl: String = "",
     val audioUrl: String = "",
-    val tags: String = ""
+    val tags: String = "",
+    val isFetching: Boolean = false
 )

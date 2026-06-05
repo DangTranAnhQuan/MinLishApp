@@ -13,8 +13,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import com.project.minlishapp.domain.model.User
 import java.util.Date
 import javax.inject.Inject
 import java.time.LocalDate
@@ -39,6 +41,8 @@ class DashboardViewModel @Inject constructor(
     )
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
+    private var isLegacySynced = false
+
     init {
         viewModelScope.launch {
             authRepository.currentUser.collectLatest { firebaseUser ->
@@ -52,17 +56,12 @@ class DashboardViewModel @Inject constructor(
                                 if (user != null) {
                                     val effectiveStreak = calculateEffectiveStreak(user.currentStreak, user.lastLearnedDate)
                                     _uiState.update {
-                                        it.copy(currentStreak = effectiveStreak)
+                                        it.copy(
+                                            currentStreak = effectiveStreak,
+                                            totalWordsLearned = user.totalWordsLearned
+                                        )
                                     }
-                                }
-                            }
-                        }
-                        launch {
-                            cardRepository.getLearnedCardsCount(firebaseUser.uid)
-                                .catch { e -> android.util.Log.e("DashboardVM", "getLearnedCardsCount error", e) }
-                                .collect { count ->
-                                _uiState.update {
-                                    it.copy(totalWordsLearned = count)
+                                    syncLegacyWordCount(user)
                                 }
                             }
                         }
@@ -85,6 +84,21 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    private fun syncLegacyWordCount(user: User) {
+        if (isLegacySynced) return
+        isLegacySynced = true
+        viewModelScope.launch {
+            try {
+                val cards = cardRepository.getCardsByUser(user.uid).first()
+                val actualCount = cards.count { it.sm2Interval > 0 }
+                if (actualCount > user.totalWordsLearned) {
+                    userRepository.saveUser(user.copy(totalWordsLearned = actualCount))
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("DashboardVM", "Sync error", e)
+            }
+        }
+    }
 }
 
 internal fun calculateEffectiveStreak(
