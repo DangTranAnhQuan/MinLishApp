@@ -84,13 +84,21 @@ class PracticeRepositoryImpl @Inject constructor(
                     } else {
                         null
                     }
+                    val updateData = mutableMapOf<String, Any>()
+                    
                     if (updatedStreak != null) {
+                        updateData[CURRENT_STREAK_FIELD] = updatedStreak
+                        updateData[LAST_LEARNED_DATE_FIELD] = FieldValue.serverTimestamp()
+                    }
+                    
+                    if (shouldCountFirstTimeLearned) {
+                        updateData[TOTAL_WORDS_LEARNED_FIELD] = FieldValue.increment(1)
+                    }
+
+                    if (updateData.isNotEmpty()) {
                         transaction.set(
                             userDocument,
-                            mapOf(
-                                CURRENT_STREAK_FIELD to updatedStreak,
-                                LAST_LEARNED_DATE_FIELD to FieldValue.serverTimestamp()
-                            ),
+                            updateData,
                             SetOptions.merge()
                         )
                     }
@@ -107,6 +115,7 @@ class PracticeRepositoryImpl @Inject constructor(
         const val SM2_INTERVAL_FIELD = "sm2Interval"
         const val CURRENT_STREAK_FIELD = "currentStreak"
         const val LAST_LEARNED_DATE_FIELD = "lastLearnedDate"
+        const val TOTAL_WORDS_LEARNED_FIELD = "totalWordsLearned"
     }
 }
 
