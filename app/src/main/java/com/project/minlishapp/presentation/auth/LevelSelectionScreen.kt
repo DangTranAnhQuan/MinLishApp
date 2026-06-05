@@ -41,23 +41,6 @@ fun LevelSelectionScreen(
             viewModel.resetProfileSetupSuccess()
         }
     }
-//Start
-//    LevelSelectionContent(
-//        uiState = uiState,
-//        onLevelSelected = viewModel::onCurrentLevelChange,
-//        onStartLearning = viewModel::completeProfileSetup,
-//        modifier = modifier
-//    )
-//}
-//
-//@Composable
-//fun LevelSelectionContent(
-//    uiState: AuthUiState,
-//    onLevelSelected: (String) -> Unit,
-//    onStartLearning: () -> Unit,
-//    modifier: Modifier = Modifier
-//) {
-    //End
     Scaffold(
         modifier = modifier
             .fillMaxSize()
@@ -101,7 +84,6 @@ fun LevelSelectionScreen(
             LevelSelectionList(
                 uiState = uiState,
                 onLevelSelected = { viewModel.onCurrentLevelChange(it) }
-//                onLevelSelected = onLevelSelected
             )
         }
     }
@@ -244,14 +226,3 @@ private fun LevelCard(
         }
     }
 }
-//Start
-//@Preview(showBackground = true)
-//@Composable
-//fun LevelSelectionScreenPreview() {
-//    LevelSelectionContent(
-//        uiState = AuthUiState(currentLevel = "B1"),
-//        onLevelSelected = {},
-//        onStartLearning = {}
-//    )
-//}
-//End
