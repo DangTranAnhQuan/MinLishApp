@@ -62,35 +62,6 @@ fun RegisterScreen(
             viewModel.resetRegisterSuccess()
         }
     }
-//Start
-//    RegisterContent(
-//        uiState = uiState,
-//        onDisplayNameChange = viewModel::onDisplayNameChange,
-//        onEmailChange = viewModel::onEmailChange,
-//        onPasswordChange = viewModel::onPasswordChange,
-//        onSignUpClick = viewModel::signUp,
-//        onNavigateToLogin = onNavigateToLogin,
-//        onGoogleLoginClick = viewModel::loginWithCredential,
-//        onShowError = viewModel::showError,
-//        modifier = modifier
-//    )
-//}
-//
-//@Composable
-//fun RegisterContent(
-//    uiState: AuthUiState,
-//    onDisplayNameChange: (String) -> Unit,
-//    onEmailChange: (String) -> Unit,
-//    onPasswordChange: (String) -> Unit,
-//    onSignUpClick: () -> Unit,
-//    onNavigateToLogin: () -> Unit,
-//    onGoogleLoginClick: (com.google.firebase.auth.AuthCredential) -> Unit,
-//    onShowError: (String) -> Unit,
-//    modifier: Modifier = Modifier
-//) {
-//    val context = LocalContext.current
-//    val coroutineScope = rememberCoroutineScope()
-//End
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
@@ -109,15 +80,11 @@ fun RegisterScreen(
             onDisplayNameChange = { viewModel.onDisplayNameChange(it) },
             onEmailChange = { viewModel.onEmailChange(it) },
             onPasswordChange = { viewModel.onPasswordChange(it) }
-//            onDisplayNameChange = onDisplayNameChange,
-//            onEmailChange = onEmailChange,
-//            onPasswordChange = onPasswordChange
         )
         Spacer(modifier = Modifier.weight(1f))
         RegisterActions(
             uiState = uiState,
             onSignUpClick = { viewModel.signUp() }
-//            onSignUpClick = onSignUpClick
         )
         Spacer(modifier = Modifier.weight(0.8f))
         RegisterSocialSection(
@@ -125,8 +92,6 @@ fun RegisterScreen(
             coroutineScope = coroutineScope,
             onGoogleLoginClick = { credential -> viewModel.loginWithCredential(credential) },
             onShowError = { error -> viewModel.showError(error) }
-//            onGoogleLoginClick = onGoogleLoginClick,
-//            onShowError = onShowError
         )
         Spacer(modifier = Modifier.weight(0.8f))
         RegisterFooter(
@@ -466,34 +431,3 @@ private fun RegisterFooter(onNavigateToLogin: () -> Unit) {
         }
     }
 }
-//Start
-//@Preview(showBackground = true)
-//@Composable
-//fun RegisterScreenEmptyPreview() {
-//    RegisterContent(
-//        uiState = AuthUiState(),
-//        onDisplayNameChange = {},
-//        onEmailChange = {},
-//        onPasswordChange = {},
-//        onSignUpClick = {},
-//        onNavigateToLogin = {},
-//        onGoogleLoginClick = {},
-//        onShowError = {}
-//    )
-//}
-//
-//@Preview(showBackground = true)
-//@Composable
-//fun RegisterScreenLoadingPreview() {
-//    RegisterContent(
-//        uiState = AuthUiState(isLoading = true, email = "test@example.com", password = "password"),
-//        onDisplayNameChange = {},
-//        onEmailChange = {},
-//        onPasswordChange = {},
-//        onSignUpClick = {},
-//        onNavigateToLogin = {},
-//        onGoogleLoginClick = {},
-//        onShowError = {}
-//    )
-//}
-//End

@@ -49,6 +49,7 @@ fun LoginScreen(
     onNavigateToRegister: () -> Unit,
     onLoginSuccess: () -> Unit,
     onNavigateToProfileSetup: () -> Unit,
+    onNavigateToForgotPassword: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: AuthViewModel
 ) {
@@ -65,34 +66,6 @@ fun LoginScreen(
             }
         }
     }
-    // Start
-//
-//    LoginContent(
-//        uiState = uiState,
-//        onEmailChange = viewModel::onEmailChange,
-//        onPasswordChange = viewModel::onPasswordChange,
-//        onLoginClick = viewModel::login,
-//        onNavigateToRegister = onNavigateToRegister,
-//        onGoogleLoginClick = viewModel::loginWithCredential,
-//        onShowError = viewModel::showError,
-//        modifier = modifier
-//    )
-//}
-//
-//@Composable
-//fun LoginContent(
-//    uiState: AuthUiState,
-//    onEmailChange: (String) -> Unit,
-//    onPasswordChange: (String) -> Unit,
-//    onLoginClick: () -> Unit,
-//    onNavigateToRegister: () -> Unit,
-//    onGoogleLoginClick: (com.google.firebase.auth.AuthCredential) -> Unit,
-//    onShowError: (String) -> Unit,
-//    modifier: Modifier = Modifier
-//) {
-//    val context = LocalContext.current
-//    val coroutineScope = rememberCoroutineScope()
-//End
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
@@ -109,15 +82,13 @@ fun LoginScreen(
         LoginForm(
             uiState = uiState,
             onEmailChange = { viewModel.onEmailChange(it) },
-            onPasswordChange = { viewModel.onPasswordChange(it) }
-//            onEmailChange = onEmailChange,
-//            onPasswordChange = onPasswordChange
+            onPasswordChange = { viewModel.onPasswordChange(it) },
+            onForgotPasswordClick = onNavigateToForgotPassword
         )
         Spacer(modifier = Modifier.weight(1f))
         LoginActions(
             uiState = uiState,
             onLoginClick = { viewModel.login() }
-//            onLoginClick = onLoginClick
         )
         Spacer(modifier = Modifier.weight(0.8f))
         SocialSection(
@@ -125,8 +96,6 @@ fun LoginScreen(
             coroutineScope = coroutineScope,
             onGoogleLoginClick = { credential -> viewModel.loginWithCredential(credential) },
             onShowError = { error -> viewModel.showError(error) }
-//            onGoogleLoginClick = onGoogleLoginClick,
-//            onShowError = onShowError
         )
         Spacer(modifier = Modifier.weight(0.8f))
         LoginFooter(
@@ -207,7 +176,8 @@ private fun LoginHeader() {
 private fun LoginForm(
     uiState: AuthUiState,
     onEmailChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit
+    onPasswordChange: (String) -> Unit,
+    onForgotPasswordClick: (() -> Unit)? = null
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.Top),
@@ -297,7 +267,9 @@ private fun LoginForm(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    modifier = Modifier.wrapContentHeight(align = Alignment.CenterVertically)
+                    modifier = Modifier
+                        .wrapContentHeight(align = Alignment.CenterVertically)
+                        .clickable(enabled = onForgotPasswordClick != null) { onForgotPasswordClick?.invoke() }
                 )
             }
         }
@@ -445,46 +417,3 @@ private fun LoginFooter(onNavigateToRegister: () -> Unit) {
         }
     }
 }
-//Start
-//@Preview(showBackground = true, showSystemUi = true)
-//@Composable
-//fun LoginScreenEmptyPreview() {
-//    LoginContent(
-//        uiState = AuthUiState(),
-//        onEmailChange = {},
-//        onPasswordChange = {},
-//        onLoginClick = {},
-//        onNavigateToRegister = {},
-//        onGoogleLoginClick = {},
-//        onShowError = {}
-//    )
-//}
-//
-//@Preview(showBackground = true)
-//@Composable
-//fun LoginScreenLoadingPreview() {
-//    LoginContent(
-//        uiState = AuthUiState(isLoading = true, email = "test@example.com", password = "password"),
-//        onEmailChange = {},
-//        onPasswordChange = {},
-//        onLoginClick = {},
-//        onNavigateToRegister = {},
-//        onGoogleLoginClick = {},
-//        onShowError = {}
-//    )
-//}
-//
-//@Preview(showBackground = true)
-//@Composable
-//fun LoginScreenErrorPreview() {
-//    LoginContent(
-//        uiState = AuthUiState(errorMessage = "Invalid email or password"),
-//        onEmailChange = {},
-//        onPasswordChange = {},
-//        onLoginClick = {},
-//        onNavigateToRegister = {},
-//        onGoogleLoginClick = {},
-//        onShowError = {}
-//    )
-//}
-//End

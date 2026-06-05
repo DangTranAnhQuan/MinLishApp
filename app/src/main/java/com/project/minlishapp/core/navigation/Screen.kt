@@ -3,6 +3,7 @@ package com.project.minlishapp.core.navigation
 sealed class Screen(val route: String, val title: String? = null) {
     object Login : Screen("login")
     object Register : Screen("register")
+    object ForgotPassword : Screen("forgot_password")
     object AuthLogin : Screen("auth_login")
     object AuthRegister : Screen("auth_register")
     object AuthLearningGoal : Screen("auth_learning_goal")

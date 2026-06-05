@@ -50,35 +50,6 @@ fun ProfileScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showAvatarDialog by remember { mutableStateOf(false) }
-    //Start
-//    ProfileContent(
-//        uiState = uiState,
-//        onNameChange = viewModel::onNameChange,
-//        onLearningTargetChange = viewModel::onLearningTargetChange,
-//        onCurrentLevelChange = viewModel::onCurrentLevelChange,
-//        onProfilePictureChange = viewModel::onProfilePictureChange,
-//        onSaveChanges = viewModel::updateUserProfile,
-//        onLogoutClick = {
-//            viewModel.logout()
-//            onLogoutClick()
-//        },
-//        modifier = modifier
-//    )
-//}
-//
-//@OptIn(ExperimentalMaterial3Api::class)
-//@Composable
-//fun ProfileContent(
-//    uiState: ProfileUiState,
-//    onNameChange: (String) -> Unit,
-//    onLearningTargetChange: (String) -> Unit,
-//    onCurrentLevelChange: (String) -> Unit,
-//    onProfilePictureChange: (String) -> Unit,
-//    onSaveChanges: () -> Unit,
-//    onLogoutClick: () -> Unit,
-//    modifier: Modifier = Modifier
-//) {
-//    var showAvatarDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showSuccessBanner by remember { mutableStateOf(false) }
 
@@ -96,8 +67,6 @@ fun ProfileScreen(
             onDismiss = { showAvatarDialog = false },
             onAvatarSelected = { avatarResName: String ->
                 viewModel.onProfilePictureChange(avatarResName)
-//            onAvatarSelected = { avatarResName ->
-//                onProfilePictureChange(avatarResName)
             }
         )
     }
@@ -224,9 +193,6 @@ fun ProfileScreen(
                         onNameChange = { viewModel.onNameChange(it) },
                         onLearningTargetChange = { viewModel.onLearningTargetChange(it) },
                         onCurrentLevelChange = { viewModel.onCurrentLevelChange(it) }
-//                        onNameChange = onNameChange,
-//                        onLearningTargetChange = onLearningTargetChange,
-//                        onCurrentLevelChange = onCurrentLevelChange
                     )
                 }
                 
@@ -234,7 +200,6 @@ fun ProfileScreen(
                     ProfileActions(
                         uiState = uiState,
                         onSaveChanges = { viewModel.updateUserProfile() },
-//                        onSaveChanges = onSaveChanges,
                         onLogoutClick = { showLogoutDialog = true }
                     )
                 }
@@ -553,26 +518,5 @@ fun AvatarSelectionDialog(
         },
         containerColor = Color.White,
         shape = RoundedCornerShape(24.dp)
-        //Start
-//    )
-//}
-//
-//@Preview(showBackground = true)
-//@Composable
-//fun ProfileScreenPreview() {
-//    ProfileContent(
-//        uiState = ProfileUiState(
-//            name = "Alex Robinson",
-//            email = "alex.robinson@example.com",
-//            learningTarget = "Business Communication",
-//            currentLevel = "B1"
-//        ),
-//        onNameChange = {},
-//        onLearningTargetChange = {},
-//        onCurrentLevelChange = {},
-//        onProfilePictureChange = {},
-//        onSaveChanges = {},
-//        onLogoutClick = {}
-//        End
     )
 }

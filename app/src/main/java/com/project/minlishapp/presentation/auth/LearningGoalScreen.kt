@@ -40,23 +40,6 @@ fun LearningGoalScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
-//Start
-//    LearningGoalContent(
-//        uiState = uiState,
-//        onGoalSelected = viewModel::onLearningTargetChange,
-//        onNavigateNext = onNavigateNext,
-//        modifier = modifier
-//    )
-//}
-//
-//@Composable
-//fun LearningGoalContent(
-//    uiState: AuthUiState,
-//    onGoalSelected: (String) -> Unit,
-//    onNavigateNext: () -> Unit,
-//    modifier: Modifier = Modifier
-//) {
-    //End
     Scaffold(
         modifier = modifier
             .fillMaxSize()
@@ -98,7 +81,6 @@ fun LearningGoalScreen(
             LearningGoalGrid(
                 uiState = uiState,
                 onGoalSelected = { viewModel.onLearningTargetChange(it) }
-//                onGoalSelected = onGoalSelected
             )
         }
     }
@@ -199,7 +181,6 @@ private fun GoalCard(
                     .padding(8.dp)
                     .size(20.dp)
                     .background(Color.White, RoundedCornerShape(99.dp))
-//                    .background(Color.White, CircleShape)
             )
         }
         
@@ -212,7 +193,6 @@ private fun GoalCard(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(RoundedCornerShape(99.dp))
-//                    .clip(CircleShape)
                     .background(if (isSelected) Color.White else Color(0xfff0f2f5)),
                 contentAlignment = Alignment.Center
             ) {
@@ -236,14 +216,3 @@ private fun GoalCard(
         }
     }
 }
-//Start
-//@Preview(showBackground = true)
-//@Composable
-//fun LearningGoalScreenPreview() {
-//    LearningGoalContent(
-//        uiState = AuthUiState(learningTarget = "IELTS"),
-//        onGoalSelected = {},
-//        onNavigateNext = {}
-//    )
-//}
-//End
