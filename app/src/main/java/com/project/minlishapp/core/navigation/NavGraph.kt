@@ -107,8 +107,17 @@ fun NavGraph(
                 onAddCardClick = { deckId ->
                     navController.navigate(Screen.AddCard.createRoute(deckId))
                 },
-                onLearnDeckClick = { deckId ->
-                    navController.navigate(Screen.FlashcardLearning.createRoute(deckId))
+                onLearnDeckClick = { deckId, isOfficialReview ->
+                    navController.navigate(
+                        Screen.FlashcardLearning.createRoute(
+                            deckId = deckId,
+                            reviewMode = if (isOfficialReview) {
+                                Screen.FlashcardLearning.OFFICIAL_REVIEW_MODE
+                            } else {
+                                Screen.FlashcardLearning.FREE_REVIEW_MODE
+                            }
+                        )
+                    )
                 }
             )
         }
@@ -206,8 +215,17 @@ fun MainNavGraph(
                 onAddCardClick = { deckId ->
                     rootNavController.navigate(Screen.AddCard.createRoute(deckId))
                 },
-                onLearnDeckClick = { deckId ->
-                    rootNavController.navigate(Screen.FlashcardLearning.createRoute(deckId))
+                onLearnDeckClick = { deckId, isOfficialReview ->
+                    rootNavController.navigate(
+                        Screen.FlashcardLearning.createRoute(
+                            deckId = deckId,
+                            reviewMode = if (isOfficialReview) {
+                                Screen.FlashcardLearning.OFFICIAL_REVIEW_MODE
+                            } else {
+                                Screen.FlashcardLearning.FREE_REVIEW_MODE
+                            }
+                        )
+                    )
                 }
             )
         }

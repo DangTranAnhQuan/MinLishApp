@@ -204,7 +204,7 @@ class FlashcardViewModel @Inject constructor(
 
         val currentCard = currentCard() ?: return
         if (!isOfficialReview) {
-            completeFreePracticeReview(currentCard, grade)
+            completeCurrentFreePracticeCard()
             return
         }
 
@@ -222,6 +222,28 @@ class FlashcardViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(isSubmitting = true, statusMessage = null, errorMessage = null)
         completeOfficialPracticeReview(submission)
         persistFlashcardSubmission(submission)
+    }
+
+    fun completeCurrentFreePracticeCard() {
+        if (_uiState.value.isSubmitting || isOfficialReview) return
+        val currentCard = currentCard() ?: return
+        pendingSubmission = null
+        reviewedCardIds += currentCard.id
+        val currentState = _uiState.value
+        val remainingCards = currentState.cards.filterNot { it.id == currentCard.id }
+        val nextIndex = currentState.currentCardIndex
+            .coerceAtMost((remainingCards.size - 1).coerceAtLeast(0))
+        _uiState.value = currentState.copy(
+            cards = remainingCards,
+            currentCardIndex = nextIndex,
+            isFlipped = false,
+            isSubmitting = false,
+            isSessionCompleted = remainingCards.isEmpty(),
+            completedReviewCount = reviewedCardIds.size,
+            sessionTotalCount = maxOf(currentState.sessionTotalCount, reviewedCardIds.size),
+            statusMessage = "Luyện tự do: đã ghi nhận trong phiên, lịch SM-2 không đổi.",
+            errorMessage = null
+        )
     }
 
     private fun completeOfficialPracticeReview(submission: PendingFlashcardSubmission) {
@@ -313,31 +335,6 @@ class FlashcardViewModel @Inject constructor(
             attempt = attempt,
             reviewedCard = updatedCard,
             grade = grade
-        )
-    }
-
-    private fun completeFreePracticeReview(currentCard: Card, grade: ReviewGrade) {
-        pendingSubmission = null
-        reviewedCardIds += currentCard.id
-        val currentState = _uiState.value
-        val remainingCards = currentState.cards.filterNot { it.id == currentCard.id }
-        val nextIndex = currentState.currentCardIndex
-            .coerceAtMost((remainingCards.size - 1).coerceAtLeast(0))
-        _uiState.value = currentState.copy(
-            cards = remainingCards,
-            currentCardIndex = nextIndex,
-            isFlipped = false,
-            isSubmitting = false,
-            isSessionCompleted = remainingCards.isEmpty(),
-            completedReviewCount = reviewedCardIds.size,
-            sessionTotalCount = maxOf(currentState.sessionTotalCount, reviewedCardIds.size),
-            statusMessage = when (grade) {
-                ReviewGrade.AGAIN -> "Luyện tự do: đánh dấu cần xem lại, lịch SM-2 không đổi."
-                ReviewGrade.HARD -> "Luyện tự do: ghi nhận mức khó, lịch SM-2 không đổi."
-                ReviewGrade.GOOD -> "Luyện tự do: ghi nhận mức tốt, lịch SM-2 không đổi."
-                ReviewGrade.EASY -> "Luyện tự do: ghi nhận mức dễ, lịch SM-2 không đổi."
-            },
-            errorMessage = null
         )
     }
 

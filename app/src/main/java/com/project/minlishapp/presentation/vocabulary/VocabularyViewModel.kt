@@ -8,6 +8,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.minlishapp.data.remote.CardAutoFillService
 import com.project.minlishapp.domain.model.Card
 import com.project.minlishapp.domain.model.Deck
 import com.project.minlishapp.domain.repository.AuthRepository
@@ -26,20 +27,18 @@ import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
-import org.json.JSONArray
-import org.json.JSONObject
 
 @HiltViewModel
 class VocabularyViewModel @Inject constructor(
     private val deckRepository: DeckRepository,
     private val cardRepository: CardRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val cardAutoFillService: CardAutoFillService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VocabularyUiState())
@@ -90,6 +89,15 @@ class VocabularyViewModel @Inject constructor(
 
     fun onSearchQueryChange(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
+    }
+
+    fun clearImportExportStatus() {
+        _uiState.update {
+            it.copy(
+                importStatus = "",
+                errorMessage = null
+            )
+        }
     }
 
     fun loadCards(deckId: String) {
@@ -157,93 +165,70 @@ class VocabularyViewModel @Inject constructor(
         _uiState.update { it.copy(cardForm = update(it.cardForm)) }
     }
 
-    fun fetchWordDetails(word: String) {
-        if (word.isBlank()) return
+    fun clearCardForm() {
+        _uiState.update {
+            it.copy(
+                cardForm = CardFormState(),
+                autoFillMessage = null,
+                errorMessage = null
+            )
+        }
+    }
+
+    fun loadCardIntoForm(card: Card) {
+        _uiState.update {
+            it.copy(
+                cardForm = card.toFormState(),
+                autoFillMessage = null,
+                errorMessage = null
+            )
+        }
+    }
+
+    fun autoFillCardDetails() {
+        val word = _uiState.value.cardForm.word.trim()
+        if (word.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Enter a word before auto fill.") }
+            return
+        }
 
         viewModelScope.launch {
-            _uiState.update { it.copy(cardForm = it.cardForm.copy(isFetching = true), errorMessage = null) }
-            
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val encodedWord = URLEncoder.encode(word.trim(), "UTF-8")
-                    val url = URL("https://api.dictionaryapi.dev/api/v2/entries/en/$encodedWord")
-                    val connection = url.openConnection() as HttpURLConnection
-                    connection.requestMethod = "GET"
-                    connection.setRequestProperty("User-Agent", "MinLishApp/1.0")
-                    connection.connectTimeout = 5000
-                    connection.readTimeout = 5000
-                    
-                    if (connection.responseCode == 200) {
-                        val reader = BufferedReader(InputStreamReader(connection.inputStream))
-                        val response = reader.readText()
-                        reader.close()
-                        
-                        val jsonArray = JSONArray(response)
-                        val entry = jsonArray.getJSONObject(0)
-                        
-                        // Try to get phonetic from different possible locations in API response
-                        var phonetic = entry.optString("phonetic", "")
-                        if (phonetic.isBlank()) {
-                            val phoneticsArr = entry.optJSONArray("phonetics")
-                            if (phoneticsArr != null && phoneticsArr.length() > 0) {
-                                for (i in 0 until phoneticsArr.length()) {
-                                    val pObj = phoneticsArr.getJSONObject(i)
-                                    val text = pObj.optString("text", "")
-                                    if (text.isNotBlank()) {
-                                        phonetic = text
-                                        break
-                                    }
-                                }
-                            }
-                        }
-
-                        val meanings = entry.optJSONArray("meanings")
-                        var definition = ""
-                        var example = ""
-                        
-                        if (meanings != null && meanings.length() > 0) {
-                            val firstMeaning = meanings.getJSONObject(0)
-                            val definitions = firstMeaning.optJSONArray("definitions")
-                            if (definitions != null && definitions.length() > 0) {
-                                val firstDef = definitions.getJSONObject(0)
-                                definition = firstDef.optString("definition", "")
-                                example = firstDef.optString("example", "")
-                            }
-                        }
-                        
-                        Triple(phonetic, definition, example)
-                    } else if (connection.responseCode == 404) {
-                        throw Exception("Word '$word' not found in dictionary.")
-                    } else {
-                        throw Exception("Server error: ${connection.responseCode}")
-                    }
-                }
+            _uiState.update {
+                it.copy(
+                    isAutoFilling = true,
+                    autoFillMessage = "Looking up \"$word\"...",
+                    errorMessage = null
+                )
             }
-
-            val data = result.getOrNull()
-            if (data != null) {
+            runCatching {
+                cardAutoFillService.lookup(word)
+            }.onSuccess { result ->
                 _uiState.update { state ->
                     state.copy(
-                        cardForm = state.cardForm.copy(
-                            phonetic = if (state.cardForm.phonetic.isBlank()) data.first else state.cardForm.phonetic,
-                            definition = if (state.cardForm.definition.isBlank()) data.second else state.cardForm.definition,
-                            example = if (state.cardForm.example.isBlank()) data.third else state.cardForm.example,
-                            isFetching = false
-                        ),
+                        cardForm = state.cardForm.mergeAutoFill(result),
+                        isAutoFilling = false,
+                        autoFillMessage = if (result.hasAnyData) {
+                            "Auto fill completed. Review the details before saving."
+                        } else {
+                            "No public data found. You can still save the word manually."
+                        },
                         errorMessage = null
                     )
                 }
-            } else {
-                val error = result.exceptionOrNull()?.message ?: "Unknown error"
-                _uiState.update { it.copy(
-                    cardForm = it.cardForm.copy(isFetching = false),
-                    errorMessage = error
-                ) }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isAutoFilling = false,
+                        autoFillMessage = null,
+                        errorMessage = throwable.localizedMessage
+                            ?: "Unable to auto fill this word."
+                    )
+                }
             }
         }
     }
 
-    fun saveCard(deckId: String, onSaved: (String) -> Unit = {}) {
+    fun saveCard(deckId: String, onSaved: () -> Unit = {}) {
         val form = _uiState.value.cardForm
         val word = form.word.trim()
         if (word.isBlank()) {
@@ -271,6 +256,8 @@ class VocabularyViewModel @Inject constructor(
                     note = form.note.trim(),
                     imageUrl = form.imageUrl.trim(),
                     audioUrl = form.audioUrl.trim(),
+                    audioUrlUs = form.audioUrlUs.trim(),
+                    audioUrlUk = form.audioUrlUk.trim(),
                     tags = form.tags.split(",").map { it.trim() }.filter { it.isNotEmpty() },
                     createdAt = Date()
                 )
@@ -283,12 +270,64 @@ class VocabularyViewModel @Inject constructor(
                 }
 
                 // Reset form after save
-                val savedWord = word
-                _uiState.update { it.copy(cardForm = CardFormState(), errorMessage = null) }
-                onSaved("Saved '$savedWord' successfully!")
+                _uiState.update {
+                    it.copy(
+                        cardForm = CardFormState(),
+                        autoFillMessage = null,
+                        errorMessage = null
+                    )
+                }
+                onSaved()
             }.onFailure { throwable ->
                 _uiState.update {
                     it.copy(errorMessage = throwable.localizedMessage ?: "Unable to save card.")
+                }
+            }
+        }
+    }
+
+    fun updateCardFromForm(
+        originalCard: Card,
+        onSaved: () -> Unit = {}
+    ) {
+        val form = _uiState.value.cardForm
+        val word = form.word.trim()
+        if (word.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Word is required.") }
+            return
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                val definition = form.definition.trim()
+                val normalizedCard = originalCard.copy(
+                    word = word,
+                    pronunciation = form.phonetic.trim(),
+                    meaning = form.meaning.trim(),
+                    definition = definition,
+                    descriptionEn = definition,
+                    example = form.example.trim(),
+                    collocation = form.collocation.trim(),
+                    relatedWords = form.relatedWords.trim(),
+                    note = form.note.trim(),
+                    imageUrl = form.imageUrl.trim(),
+                    audioUrl = form.audioUrl.trim(),
+                    audioUrlUs = form.audioUrlUs.trim(),
+                    audioUrlUk = form.audioUrlUk.trim(),
+                    tags = form.tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                )
+                cardRepository.updateCard(normalizedCard)
+                _uiState.update {
+                    it.copy(
+                        cardForm = CardFormState(),
+                        autoFillMessage = null,
+                        errorMessage = null
+                    )
+                }
+                onSaved()
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(errorMessage = throwable.localizedMessage ?: "Unable to update card.")
                 }
             }
         }
@@ -316,6 +355,8 @@ class VocabularyViewModel @Inject constructor(
                     note = card.note.trim(),
                     imageUrl = card.imageUrl.trim(),
                     audioUrl = card.audioUrl.trim(),
+                    audioUrlUs = card.audioUrlUs.trim(),
+                    audioUrlUk = card.audioUrlUk.trim(),
                     tags = card.tags.map { it.trim() }.filter { it.isNotEmpty() }
                 )
                 cardRepository.updateCard(normalizedCard)
@@ -344,118 +385,139 @@ class VocabularyViewModel @Inject constructor(
         }
     }
 
-    // CSV Import Logic
+    // CSV Import/Export Logic
     fun importCsv(context: Context, uri: Uri, deckId: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isImporting = true, importProgress = 0f, importStatus = "Starting import...") }
-            
-            val userId = authRepository.currentUser.first()?.uid ?: return@launch
-            
-            try {
-                val cards = withContext(Dispatchers.IO) {
-                    val result = mutableListOf<Card>()
-                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                        BufferedReader(InputStreamReader(inputStream)).use { reader ->
-                            // Skip header if exists
-                            val firstLine = reader.readLine()
-                            // Assuming CSV format: word,phonetic,meaning,definition,example,imageUrl,audioUrl,tags
-                            var line: String? = reader.readLine()
-                            while (line != null) {
-                            // Basic CSV split to avoid potential KSP/Compiler issues with complex regex
-                            val parts = line.split(",")
-                                .map { it.trim().removeSurrounding("\"") }
+            _uiState.update {
+                it.copy(
+                    isImporting = true,
+                    importProgress = 0f,
+                    importStatus = "Reading CSV file...",
+                    errorMessage = null
+                )
+            }
 
-                                if (parts.size >= 3) {
-                                    val word = parts.getOrNull(0)?.trim().orEmpty()
-                                    if (word.isBlank()) {
-                                        line = reader.readLine()
-                                        continue
-                                    }
-                                    val definition = parts.getOrNull(3)?.trim() ?: ""
-                                    val card = Card(
-                                        id = UUID.randomUUID().toString(),
-                                        deckId = deckId,
-                                        userId = userId,
-                                        word = word,
-                                        pronunciation = parts.getOrNull(1)?.trim() ?: "",
-                                        meaning = parts.getOrNull(2)?.trim() ?: "",
-                                        definition = definition,
-                                        descriptionEn = definition,
-                                        example = parts.getOrNull(4)?.trim() ?: "",
-                                        imageUrl = parts.getOrNull(5)?.trim() ?: "",
-                                        audioUrl = parts.getOrNull(6)?.trim() ?: "",
-                                        tags = parts.getOrNull(7)?.split("|")?.map { it.trim() } ?: emptyList()
-                                    )
-                                    result.add(card)
-                                }
-                                line = reader.readLine()
-                            }
-                        }
-                    }
-                    result
+            val userId = authRepository.currentUser.first()?.uid
+            if (userId.isNullOrBlank()) {
+                _uiState.update {
+                    it.copy(
+                        isImporting = false,
+                        importStatus = "Import failed: you need to sign in first.",
+                        errorMessage = "You need to sign in before importing cards."
+                    )
+                }
+                return@launch
+            }
+
+            runCatching {
+                val importResult = withContext(Dispatchers.IO) {
+                    val csvContent = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        inputStream.readBytes().toString(Charsets.UTF_8)
+                    } ?: error("Cannot open the selected CSV file.")
+                    parseCardsFromCsv(
+                        csvContent = csvContent,
+                        deckId = deckId,
+                        userId = userId
+                    )
                 }
 
-                val total = cards.size
+                if (importResult.cards.isEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            isImporting = false,
+                            importProgress = 0f,
+                            importStatus = "Import failed: no valid cards found. The CSV needs at least a Word column."
+                        )
+                    }
+                    return@launch
+                }
+
                 var processedCount = 0
-                for ((index, chunk) in cards.chunked(50).withIndex()) {
+                importResult.cards.chunked(CSV_IMPORT_CHUNK_SIZE).forEach { chunk ->
                     cardRepository.insertCards(chunk)
                     processedCount += chunk.size
-                    val progress = processedCount.toFloat() / total
-                    _uiState.update { 
+                    val progress = processedCount.toFloat() / importResult.cards.size.toFloat()
+                    _uiState.update {
                         it.copy(
-                            importProgress = progress.coerceAtMost(1f),
-                            importStatus = "Processing: ${processedCount.coerceAtMost(total)} / $total words"
+                            importProgress = progress.coerceIn(0f, 1f),
+                            importStatus = "Importing $processedCount / ${importResult.cards.size} cards..."
                         )
                     }
                 }
-                
-                _uiState.update { it.copy(isImporting = false, importStatus = "Success! $total words imported.") }
-                
-                // Update deck word count
+
                 deckRepository.getDeck(deckId).first()?.let { deck ->
-                    val updatedDeck = deck.copy(wordCount = deck.wordCount + total)
-                    deckRepository.updateDeck(updatedDeck)
+                    val actualCount = cardRepository.getCardsInDeck(deckId).first().size
+                    deckRepository.updateDeck(deck.copy(wordCount = actualCount))
                 }
-                
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isImporting = false, importStatus = "Error: ${e.message}") }
+
+                val skippedMessage = if (importResult.skippedRows > 0) {
+                    " Skipped ${importResult.skippedRows} invalid rows."
+                } else {
+                    ""
+                }
+                _uiState.update {
+                    it.copy(
+                        isImporting = false,
+                        importProgress = 1f,
+                        importStatus = "Import completed: ${importResult.cards.size} cards added.$skippedMessage",
+                        errorMessage = null
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isImporting = false,
+                        importProgress = 0f,
+                        importStatus = "Import failed: ${throwable.localizedMessage ?: "Unknown error"}",
+                        errorMessage = throwable.localizedMessage ?: "Import failed."
+                    )
+                }
             }
         }
     }
 
     fun exportDeck(context: Context, deckId: String, deckTitle: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            try {
+            _uiState.update {
+                it.copy(
+                    isExporting = true,
+                    importStatus = "Preparing CSV export...",
+                    errorMessage = null
+                )
+            }
+            runCatching {
                 val cards = cardRepository.getCardsInDeck(deckId).first()
-                val csvContent = buildString {
-                    append("Word,Phonetic,Meaning,Definition,Example,ImageUrl,AudioUrl,Tags\n")
-                    cards.forEach { card ->
-                        val definition = card.descriptionEn.ifBlank { card.definition }
-                        append("${escapeCsv(card.word)},")
-                        append("${escapeCsv(card.pronunciation)},")
-                        append("${escapeCsv(card.meaning)},")
-                        append("${escapeCsv(definition)},")
-                        append("${escapeCsv(card.example)},")
-                        append("${escapeCsv(card.imageUrl)},")
-                        append("${escapeCsv(card.audioUrl)},")
-                        append("${escapeCsv(card.tags.joinToString("|"))}\n")
+                if (cards.isEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            isExporting = false,
+                            importStatus = "Export skipped: this deck has no cards.",
+                            errorMessage = "This deck has no cards to export."
+                        )
                     }
+                    return@launch
                 }
 
-                saveFileToDownloads(context, "${deckTitle.replace(" ", "_")}_export.csv", csvContent)
-                _uiState.update { it.copy(isLoading = false, errorMessage = "Exported to Downloads folder") }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, errorMessage = "Export failed: ${e.message}") }
-            }
-        }
-    }
+                val csvContent = buildCardsCsv(cards)
+                val fileName = buildExportFileName(deckTitle)
+                saveFileToDownloads(context, fileName, csvContent)
 
-    private fun escapeCsv(value: String): String {
-        return if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
-            "\"${value.replace("\"", "\"\"")}\""
-        } else {
-            value
+                _uiState.update {
+                    it.copy(
+                        isExporting = false,
+                        importStatus = "Export completed: ${cards.size} cards saved to Downloads/$fileName.",
+                        errorMessage = "Exported ${cards.size} cards to Downloads/$fileName"
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isExporting = false,
+                        importStatus = "Export failed: ${throwable.localizedMessage ?: "Unknown error"}",
+                        errorMessage = throwable.localizedMessage ?: "Export failed."
+                    )
+                }
+            }
         }
     }
 
@@ -479,7 +541,7 @@ class VocabularyViewModel @Inject constructor(
             val uri = resolver.insert(collectionUri, contentValues)
             uri?.let {
                 resolver.openOutputStream(it)?.use { outputStream ->
-                    OutputStreamWriter(outputStream).use { writer ->
+                    OutputStreamWriter(outputStream, Charsets.UTF_8).use { writer ->
                         writer.write(content)
                     }
                 }
@@ -488,13 +550,234 @@ class VocabularyViewModel @Inject constructor(
     }
 }
 
+private data class CsvImportResult(
+    val cards: List<Card>,
+    val skippedRows: Int
+)
+
+private fun buildCardsCsv(cards: List<Card>): String {
+    val builder = StringBuilder()
+    builder.append('\uFEFF')
+    builder.appendLine(toCsvRow(CARD_CSV_HEADERS))
+    cards.forEach { card ->
+        builder.appendLine(
+            toCsvRow(
+                listOf(
+                    card.word,
+                    card.pronunciation,
+                    card.meaning,
+                    card.definition,
+                    card.descriptionEn.ifBlank { card.definition },
+                    card.example,
+                    card.collocation,
+                    card.relatedWords,
+                    card.note,
+                    card.imageUrl,
+                    card.audioUrl,
+                    card.audioUrlUs,
+                    card.audioUrlUk,
+                    card.tags.joinToString("|")
+                )
+            )
+        )
+    }
+    return builder.toString()
+}
+
+private fun parseCardsFromCsv(
+    csvContent: String,
+    deckId: String,
+    userId: String
+): CsvImportResult {
+    val rows = parseCsvRows(csvContent)
+        .filterNot { row -> row.all { it.isBlank() } }
+    if (rows.isEmpty()) return CsvImportResult(emptyList(), skippedRows = 0)
+
+    val firstRow = rows.first()
+    val hasHeader = firstRow.any { normalizeCsvHeader(it) == CSV_KEY_WORD } &&
+        firstRow.count { normalizeCsvHeader(it) in CSV_HEADER_ALIASES } >= 2
+    val headerIndexes = if (hasHeader) {
+        firstRow.mapIndexedNotNull { index, header ->
+            CSV_HEADER_ALIASES[normalizeCsvHeader(header)]?.let { key -> key to index }
+        }.toMap()
+    } else {
+        emptyMap()
+    }
+    val dataRows = if (hasHeader) rows.drop(1) else rows
+
+    val cards = mutableListOf<Card>()
+    var skippedRows = 0
+    dataRows.forEach { row ->
+        val isNewSchemaWithoutHeader = !hasHeader && row.size >= CARD_CSV_HEADERS.size
+        fun cell(
+            key: String,
+            legacyIndex: Int,
+            newSchemaIndex: Int = legacyIndex
+        ): String {
+            val index = if (hasHeader) {
+                headerIndexes[key]
+            } else if (isNewSchemaWithoutHeader) {
+                newSchemaIndex
+            } else {
+                legacyIndex
+            }
+            return index?.let { row.getOrNull(it) }.orEmpty().trim()
+        }
+
+        val word = cell(CSV_KEY_WORD, legacyIndex = 0, newSchemaIndex = 0)
+        if (word.isBlank()) {
+            skippedRows++
+            return@forEach
+        }
+
+        val rawDefinition = cell(CSV_KEY_DEFINITION, legacyIndex = 3, newSchemaIndex = 3)
+        val rawDescriptionEn = cell(CSV_KEY_DESCRIPTION_EN, legacyIndex = 3, newSchemaIndex = 4)
+        val definition = rawDefinition.ifBlank { rawDescriptionEn }
+        val descriptionEn = rawDescriptionEn.ifBlank { definition }
+        val now = Date()
+        cards += Card(
+            id = UUID.randomUUID().toString(),
+            deckId = deckId,
+            userId = userId,
+            word = word,
+            pronunciation = cell(CSV_KEY_PRONUNCIATION, legacyIndex = 1, newSchemaIndex = 1),
+            meaning = cell(CSV_KEY_MEANING, legacyIndex = 2, newSchemaIndex = 2),
+            definition = definition,
+            descriptionEn = descriptionEn,
+            example = cell(CSV_KEY_EXAMPLE, legacyIndex = 4, newSchemaIndex = 5),
+            collocation = cell(CSV_KEY_COLLOCATION, legacyIndex = -1, newSchemaIndex = 6),
+            relatedWords = cell(CSV_KEY_RELATED_WORDS, legacyIndex = -1, newSchemaIndex = 7),
+            note = cell(CSV_KEY_NOTE, legacyIndex = -1, newSchemaIndex = 8),
+            imageUrl = cell(CSV_KEY_IMAGE_URL, legacyIndex = 5, newSchemaIndex = 9),
+            audioUrl = cell(CSV_KEY_AUDIO_URL, legacyIndex = 6, newSchemaIndex = 10),
+            audioUrlUs = cell(CSV_KEY_AUDIO_URL_US, legacyIndex = -1, newSchemaIndex = 11),
+            audioUrlUk = cell(CSV_KEY_AUDIO_URL_UK, legacyIndex = -1, newSchemaIndex = 12),
+            tags = parseTags(cell(CSV_KEY_TAGS, legacyIndex = 7, newSchemaIndex = 13)),
+            createdAt = now,
+            nextReviewTime = now
+        )
+    }
+
+    return CsvImportResult(cards = cards, skippedRows = skippedRows)
+}
+
+private fun parseCsvRows(csvContent: String): List<List<String>> {
+    val rows = mutableListOf<List<String>>()
+    val row = mutableListOf<String>()
+    val field = StringBuilder()
+    var inQuotes = false
+    var index = 0
+
+    fun endField() {
+        row += field.toString()
+        field.setLength(0)
+    }
+
+    fun endRow() {
+        endField()
+        rows += row.toList()
+        row.clear()
+    }
+
+    while (index < csvContent.length) {
+        when (val char = csvContent[index]) {
+            '"' -> {
+                if (inQuotes && index + 1 < csvContent.length && csvContent[index + 1] == '"') {
+                    field.append('"')
+                    index++
+                } else {
+                    inQuotes = !inQuotes
+                }
+            }
+            ',' -> {
+                if (inQuotes) {
+                    field.append(char)
+                } else {
+                    endField()
+                }
+            }
+            '\r' -> {
+                if (inQuotes) {
+                    field.append(char)
+                } else {
+                    endRow()
+                    if (index + 1 < csvContent.length && csvContent[index + 1] == '\n') {
+                        index++
+                    }
+                }
+            }
+            '\n' -> {
+                if (inQuotes) {
+                    field.append(char)
+                } else {
+                    endRow()
+                }
+            }
+            else -> field.append(char)
+        }
+        index++
+    }
+
+    if (field.isNotEmpty() || row.isNotEmpty()) {
+        endRow()
+    }
+    return rows
+}
+
+private fun toCsvRow(values: List<String>): String {
+    return values.joinToString(",") { escapeCsv(it) }
+}
+
+private fun escapeCsv(value: String): String {
+    val normalizedValue = value.replace("\r\n", "\n").replace("\r", "\n")
+    return if (
+        normalizedValue.contains(",") ||
+        normalizedValue.contains("\"") ||
+        normalizedValue.contains("\n")
+    ) {
+        "\"${normalizedValue.replace("\"", "\"\"")}\""
+    } else {
+        normalizedValue
+    }
+}
+
+private fun parseTags(value: String): List<String> {
+    return value
+        .split("|", ";", ",")
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinctBy { it.lowercase(Locale.US) }
+}
+
+private fun normalizeCsvHeader(header: String): String {
+    return header
+        .trim()
+        .removePrefix("\uFEFF")
+        .lowercase(Locale.US)
+        .filter { it.isLetterOrDigit() }
+}
+
+private fun buildExportFileName(deckTitle: String): String {
+    val safeTitle = deckTitle
+        .trim()
+        .ifBlank { "deck" }
+        .replace(Regex("""[\\/:*?"<>|]+"""), "_")
+        .replace(Regex("""\s+"""), "_")
+        .take(80)
+    val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+    return "${safeTitle}_minlish_$timestamp.csv"
+}
+
 data class VocabularyUiState(
     val decks: List<Deck> = emptyList(),
     val cards: List<Card> = emptyList(),
     val searchQuery: String = "",
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
+    val isAutoFilling: Boolean = false,
+    val autoFillMessage: String? = null,
     val isImporting: Boolean = false,
+    val isExporting: Boolean = false,
     val importProgress: Float = 0f,
     val importStatus: String = "",
     val cardForm: CardFormState = CardFormState()
@@ -511,6 +794,140 @@ data class CardFormState(
     val note: String = "",
     val imageUrl: String = "",
     val audioUrl: String = "",
-    val tags: String = "",
-    val isFetching: Boolean = false
+    val audioUrlUs: String = "",
+    val audioUrlUk: String = "",
+    val tags: String = ""
+)
+
+private fun Card.toFormState(): CardFormState {
+    return CardFormState(
+        word = word,
+        phonetic = pronunciation,
+        meaning = meaning,
+        definition = descriptionEn.ifBlank { definition },
+        example = example,
+        collocation = collocation,
+        relatedWords = relatedWords,
+        note = note,
+        imageUrl = imageUrl,
+        audioUrl = audioUrl,
+        audioUrlUs = audioUrlUs,
+        audioUrlUk = audioUrlUk,
+        tags = tags.joinToString(", ")
+    )
+}
+
+private fun CardFormState.mergeAutoFill(
+    result: com.project.minlishapp.data.remote.CardAutoFillResult
+): CardFormState {
+    val shouldReplaceExample = example.isBlank() || example.isOldGeneratedExampleFor(word)
+    return copy(
+        phonetic = phonetic.ifBlank { result.pronunciation },
+        meaning = meaning.ifBlank { result.meaning },
+        definition = definition.ifBlank { result.definition },
+        example = if (shouldReplaceExample) result.example.ifBlank { example } else example,
+        collocation = collocation.ifBlank { result.collocation },
+        relatedWords = relatedWords.ifBlank { result.relatedWords },
+        imageUrl = imageUrl.ifBlank { result.imageUrl },
+        audioUrl = audioUrl.ifBlank { result.audioUrl },
+        audioUrlUs = audioUrlUs.ifBlank { result.audioUrlUs },
+        audioUrlUk = audioUrlUk.ifBlank { result.audioUrlUk },
+        tags = tags.ifBlank { result.tags }
+    )
+}
+
+private fun String.isOldGeneratedExampleFor(word: String): Boolean {
+    val normalizedWord = word.trim()
+    return normalizedWord.isNotBlank() &&
+        trim().equals(
+            "This sentence uses the word $normalizedWord in context.",
+            ignoreCase = true
+        )
+}
+
+private val com.project.minlishapp.data.remote.CardAutoFillResult.hasAnyData: Boolean
+    get() = listOf(
+        pronunciation,
+        meaning,
+        definition,
+        example,
+        collocation,
+        relatedWords,
+        tags,
+        imageUrl,
+        audioUrl,
+        audioUrlUs,
+        audioUrlUk
+    ).any(String::isNotBlank)
+
+private const val CSV_IMPORT_CHUNK_SIZE = 50
+private const val CSV_KEY_WORD = "word"
+private const val CSV_KEY_PRONUNCIATION = "pronunciation"
+private const val CSV_KEY_MEANING = "meaning"
+private const val CSV_KEY_DEFINITION = "definition"
+private const val CSV_KEY_DESCRIPTION_EN = "descriptionEn"
+private const val CSV_KEY_EXAMPLE = "example"
+private const val CSV_KEY_COLLOCATION = "collocation"
+private const val CSV_KEY_RELATED_WORDS = "relatedWords"
+private const val CSV_KEY_NOTE = "note"
+private const val CSV_KEY_IMAGE_URL = "imageUrl"
+private const val CSV_KEY_AUDIO_URL = "audioUrl"
+private const val CSV_KEY_AUDIO_URL_US = "audioUrlUs"
+private const val CSV_KEY_AUDIO_URL_UK = "audioUrlUk"
+private const val CSV_KEY_TAGS = "tags"
+
+private val CARD_CSV_HEADERS = listOf(
+    "Word",
+    "Pronunciation",
+    "Meaning",
+    "Definition",
+    "DescriptionEn",
+    "Example",
+    "Collocation",
+    "RelatedWords",
+    "Note",
+    "ImageUrl",
+    "AudioUrl",
+    "AudioUrlUs",
+    "AudioUrlUk",
+    "Tags"
+)
+
+private val CSV_HEADER_ALIASES = mapOf(
+    "word" to CSV_KEY_WORD,
+    "term" to CSV_KEY_WORD,
+    "vocabulary" to CSV_KEY_WORD,
+    "pronunciation" to CSV_KEY_PRONUNCIATION,
+    "phonetic" to CSV_KEY_PRONUNCIATION,
+    "ipa" to CSV_KEY_PRONUNCIATION,
+    "meaning" to CSV_KEY_MEANING,
+    "vietnamese" to CSV_KEY_MEANING,
+    "vietnamesemeaning" to CSV_KEY_MEANING,
+    "definition" to CSV_KEY_DEFINITION,
+    "description" to CSV_KEY_DESCRIPTION_EN,
+    "descriptionen" to CSV_KEY_DESCRIPTION_EN,
+    "englishdescription" to CSV_KEY_DESCRIPTION_EN,
+    "descriptionenglish" to CSV_KEY_DESCRIPTION_EN,
+    "example" to CSV_KEY_EXAMPLE,
+    "sentence" to CSV_KEY_EXAMPLE,
+    "collocation" to CSV_KEY_COLLOCATION,
+    "collocations" to CSV_KEY_COLLOCATION,
+    "relatedword" to CSV_KEY_RELATED_WORDS,
+    "relatedwords" to CSV_KEY_RELATED_WORDS,
+    "related" to CSV_KEY_RELATED_WORDS,
+    "note" to CSV_KEY_NOTE,
+    "notes" to CSV_KEY_NOTE,
+    "image" to CSV_KEY_IMAGE_URL,
+    "imageurl" to CSV_KEY_IMAGE_URL,
+    "picture" to CSV_KEY_IMAGE_URL,
+    "audio" to CSV_KEY_AUDIO_URL,
+    "audiourl" to CSV_KEY_AUDIO_URL,
+    "audious" to CSV_KEY_AUDIO_URL_US,
+    "audiourlus" to CSV_KEY_AUDIO_URL_US,
+    "audiousurl" to CSV_KEY_AUDIO_URL_US,
+    "audiouk" to CSV_KEY_AUDIO_URL_UK,
+    "audiourluk" to CSV_KEY_AUDIO_URL_UK,
+    "audioukurl" to CSV_KEY_AUDIO_URL_UK,
+    "tags" to CSV_KEY_TAGS,
+    "tag" to CSV_KEY_TAGS
 )

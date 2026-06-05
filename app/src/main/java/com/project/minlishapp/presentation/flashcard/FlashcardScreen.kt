@@ -1,14 +1,18 @@
 package com.project.minlishapp.presentation.flashcard
 
+import android.graphics.BitmapFactory
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -45,11 +49,15 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -61,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.project.minlishapp.core.utils.PronunciationAccent
 import com.project.minlishapp.core.utils.TextToSpeechHelper
 import com.project.minlishapp.domain.usecase.srs.ReviewGrade
 import com.project.minlishapp.ui.theme.DarkText
@@ -69,9 +78,14 @@ import com.project.minlishapp.ui.theme.LightGraySurface
 import com.project.minlishapp.ui.theme.SoftWhite
 import com.project.minlishapp.ui.theme.VeryLightGray
 import com.project.minlishapp.ui.theme.VibrantBlue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.net.URL
+
+private val flashcardImageCache = mutableMapOf<String, androidx.compose.ui.graphics.ImageBitmap>()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,6 +99,7 @@ fun FlashcardScreen(
     val density = LocalDensity.current
     val context = LocalContext.current
     val ttsHelper = remember { TextToSpeechHelper(context) }
+    var isFlipAnimating by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -93,13 +108,18 @@ fun FlashcardScreen(
     }
 
     LaunchedEffect(uiState.isFlipped, currentCard?.id) {
-        if (uiState.isFlipped) {
-            rotation.animateTo(
-                targetValue = 180f,
-                animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing)
-            )
-        } else {
-            rotation.snapTo(0f)
+        isFlipAnimating = true
+        try {
+            if (uiState.isFlipped) {
+                rotation.animateTo(
+                    targetValue = 180f,
+                    animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing)
+                )
+            } else {
+                rotation.snapTo(0f)
+            }
+        } finally {
+            isFlipAnimating = false
         }
     }
 
@@ -223,8 +243,10 @@ fun FlashcardScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 360.dp)
-                                .clickable(enabled = !uiState.isSubmitting) { viewModel.toggleFlip() },
+                                .height(390.dp)
+                                .clickable(
+                                    enabled = !uiState.isSubmitting && !isFlipAnimating
+                                ) { viewModel.toggleFlip() },
                             shape = RoundedCornerShape(28.dp),
                             color = SoftWhite,
                             border = BorderStroke(1.dp, VeryLightGray),
@@ -254,10 +276,25 @@ fun FlashcardScreen(
                                             meaning = currentCard.meaning,
                                             descriptionEn = currentCard.descriptionEn.ifBlank { currentCard.definition },
                                             example = currentCard.example,
-                                            collocation = currentCard.collocation,
-                                            relatedWords = currentCard.relatedWords,
-                                            note = currentCard.note,
-                                            onSpeak = { ttsHelper.speak(currentCard.word) }
+                                            imageUrl = currentCard.imageUrl,
+                                            onSpeakUs = {
+                                                ttsHelper.speak(
+                                                    text = currentCard.word,
+                                                    audioUrl = currentCard.audioUrlUs.ifBlank {
+                                                        currentCard.audioUrl
+                                                    },
+                                                    accent = PronunciationAccent.US
+                                                )
+                                            },
+                                            onSpeakUk = {
+                                                ttsHelper.speak(
+                                                    text = currentCard.word,
+                                                    audioUrl = currentCard.audioUrlUk.ifBlank {
+                                                        currentCard.audioUrl
+                                                    },
+                                                    accent = PronunciationAccent.UK
+                                                )
+                                            }
                                         )
                                     }
                                 }
@@ -292,7 +329,7 @@ fun FlashcardScreen(
                             Button(
                                 onClick = viewModel::toggleFlip,
                                 modifier = Modifier.fillMaxWidth(),
-                                enabled = !uiState.isSubmitting,
+                                enabled = !uiState.isSubmitting && !isFlipAnimating,
                                 shape = RoundedCornerShape(20.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = VibrantBlue,
@@ -304,13 +341,20 @@ fun FlashcardScreen(
                                 Text(text = "Xem đáp án")
                             }
                         } else {
-                            GradeActions(
-                                enabled = !uiState.isSubmitting,
-                                onAgain = { viewModel.reviewCurrentCard(ReviewGrade.AGAIN) },
-                                onHard = { viewModel.reviewCurrentCard(ReviewGrade.HARD) },
-                                onGood = { viewModel.reviewCurrentCard(ReviewGrade.GOOD) },
-                                onEasy = { viewModel.reviewCurrentCard(ReviewGrade.EASY) }
-                            )
+                            if (uiState.isOfficialReview) {
+                                GradeActions(
+                                    enabled = !uiState.isSubmitting,
+                                    onAgain = { viewModel.reviewCurrentCard(ReviewGrade.AGAIN) },
+                                    onHard = { viewModel.reviewCurrentCard(ReviewGrade.HARD) },
+                                    onGood = { viewModel.reviewCurrentCard(ReviewGrade.GOOD) },
+                                    onEasy = { viewModel.reviewCurrentCard(ReviewGrade.EASY) }
+                                )
+                            } else {
+                                FreePracticeAction(
+                                    enabled = !uiState.isSubmitting,
+                                    onComplete = viewModel::completeCurrentFreePracticeCard
+                                )
+                            }
                         }
 
                         if (uiState.isSubmitting) {
@@ -447,7 +491,9 @@ private fun StatChip(
 }
 
 @Composable
-private fun FrontFace(word: String) {
+private fun FrontFace(
+    word: String
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -484,27 +530,17 @@ private fun BackFace(
     meaning: String,
     descriptionEn: String,
     example: String,
-    collocation: String,
-    relatedWords: String,
-    note: String,
-    onSpeak: () -> Unit
+    imageUrl: String,
+    onSpeakUs: () -> Unit,
+    onSpeakUk: () -> Unit
 ) {
     val hasDetails = listOf(
         meaning,
         descriptionEn,
-        example,
-        collocation,
-        relatedWords,
-        note
+        example
     ).any { it.isNotBlank() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .wrapContentHeight(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    ScrollableFaceContent {
         Text(
             text = word,
             color = VibrantBlue,
@@ -522,32 +558,165 @@ private fun BackFace(
                 textAlign = TextAlign.Center,
                 style = TextStyle(fontSize = 14.sp)
             )
-            if (pronunciation.isNotBlank() || word.isNotBlank()) {
-                IconButton(
-                    onClick = onSpeak,
-                    modifier = Modifier.padding(start = 4.dp).width(32.dp).height(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                        contentDescription = "Speak word",
-                        tint = VibrantBlue,
-                        modifier = Modifier.width(20.dp).height(20.dp)
-                    )
-                }
+            if (word.isNotBlank()) {
+                AccentSpeakButton(label = "US", onClick = onSpeakUs)
+                AccentSpeakButton(label = "UK", onClick = onSpeakUk)
             }
         }
-        OptionalDetailRow(label = "Meaning", value = meaning)
-        OptionalDetailRow(label = "Description EN", value = descriptionEn)
-        OptionalDetailRow(label = "Example", value = example)
-        OptionalDetailRow(label = "Collocation", value = collocation)
-        OptionalDetailRow(label = "Related Words", value = relatedWords)
-        OptionalDetailRow(label = "Note", value = note)
+        RemoteImage(
+            imageUrl = imageUrl,
+            contentDescription = "$word image",
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(128.dp)
+        )
+        OptionalDetailRow(label = "Nghĩa", value = meaning)
+        OptionalDetailRow(label = "Mô tả", value = descriptionEn)
+        OptionalDetailRow(label = "Ví dụ", value = example)
         if (!hasDetails) {
             Text(
                 text = "No details yet.",
                 color = GrayText,
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScrollableFaceContent(
+    content: @Composable () -> Unit
+) {
+    val scrollState = rememberScrollState()
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(end = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            content()
+        }
+
+        if (scrollState.maxValue > 0) {
+            val thumbHeight = 54.dp
+            val scrollFraction = scrollState.value.toFloat() / scrollState.maxValue.toFloat()
+            val thumbTop = (maxHeight - thumbHeight) * scrollFraction
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(VeryLightGray)
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = thumbTop)
+                    .width(4.dp)
+                    .height(thumbHeight)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(VibrantBlue.copy(alpha = 0.65f))
+            )
+        }
+    }
+}
+
+@Composable
+private fun AccentSpeakButton(
+    label: String,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier
+            .padding(start = 6.dp)
+            .height(34.dp),
+        shape = RoundedCornerShape(999.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+        border = BorderStroke(1.dp, VibrantBlue)
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+            contentDescription = "Speak $label",
+            tint = VibrantBlue,
+            modifier = Modifier.width(16.dp).height(16.dp)
+        )
+        Spacer(modifier = Modifier.width(3.dp))
+        Text(text = label, color = VibrantBlue, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun RemoteImage(
+    imageUrl: String,
+    contentDescription: String,
+    modifier: Modifier = Modifier
+        .fillMaxWidth()
+        .height(132.dp)
+) {
+    val normalizedUrl = imageUrl.trim()
+    if (normalizedUrl.isBlank()) return
+
+    var imageBitmap by remember(normalizedUrl) {
+        mutableStateOf(flashcardImageCache[normalizedUrl])
+    }
+    var isLoading by remember(normalizedUrl) {
+        mutableStateOf(imageBitmap == null)
+    }
+
+    LaunchedEffect(normalizedUrl) {
+        flashcardImageCache[normalizedUrl]?.let { cachedBitmap ->
+            imageBitmap = cachedBitmap
+            isLoading = false
+            return@LaunchedEffect
+        }
+
+        isLoading = true
+        val loadedBitmap = runCatching {
+            withContext(Dispatchers.IO) {
+                val connection = URL(normalizedUrl).openConnection().apply {
+                    connectTimeout = 10_000
+                    readTimeout = 10_000
+                }
+                connection.getInputStream().use { input ->
+                    BitmapFactory.decodeStream(input)?.asImageBitmap()
+                }
+            }
+        }.getOrNull()
+        if (loadedBitmap != null) {
+            flashcardImageCache[normalizedUrl] = loadedBitmap
+        }
+        imageBitmap = loadedBitmap
+        isLoading = false
+    }
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(LightGraySurface),
+        contentAlignment = Alignment.Center
+    ) {
+        imageBitmap?.let { bitmap ->
+            Image(
+                bitmap = bitmap,
+                contentDescription = contentDescription,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } ?: if (isLoading) {
+            CircularProgressIndicator(color = VibrantBlue)
+        } else {
+            Text(
+                text = "Image unavailable",
+                color = GrayText,
+                style = MaterialTheme.typography.bodySmall
             )
         }
     }
@@ -626,6 +795,37 @@ private fun GradeActions(
                 shape = RoundedCornerShape(20.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = VibrantBlue, contentColor = SoftWhite)
             ) { Text("Easy") }
+        }
+    }
+}
+
+@Composable
+private fun FreePracticeAction(
+    enabled: Boolean,
+    onComplete: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Luyện tự do",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = "Phiên này chỉ giúp bạn xem lại thẻ, không cập nhật lịch ôn SM-2.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = GrayText
+        )
+        Button(
+            onClick = onComplete,
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = VibrantBlue,
+                contentColor = SoftWhite
+            )
+        ) {
+            Text("Đã xem xong thẻ này")
         }
     }
 }
@@ -796,10 +996,9 @@ private fun FlashcardPreviewContent(showBackFace: Boolean) {
                             meaning = meaning,
                             descriptionEn = descriptionEn,
                             example = example,
-                            collocation = collocation,
-                            relatedWords = relatedWords,
-                            note = note,
-                            onSpeak = {}
+                            imageUrl = "",
+                            onSpeakUs = {},
+                            onSpeakUk = {}
                         )
                     } else {
                         FrontFace(word = word)

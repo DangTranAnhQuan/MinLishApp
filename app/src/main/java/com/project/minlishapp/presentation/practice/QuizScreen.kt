@@ -2,16 +2,21 @@ package com.project.minlishapp.presentation.practice
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,8 +25,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -36,6 +43,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,14 +51,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.project.minlishapp.core.utils.PronunciationAccent
+import com.project.minlishapp.core.utils.TextToSpeechHelper
 import com.project.minlishapp.domain.model.Card
 import com.project.minlishapp.domain.model.Deck
 import com.project.minlishapp.domain.model.PracticeSessionMode
@@ -234,10 +247,17 @@ private fun PracticeSetup(
             )
         }
 
-        QuizTypeSelector(
-            selectedQuizType = uiState.quizType,
-            onQuizTypeSelected = onQuizTypeSelected
-        )
+        if (uiState.sessionMode == PracticeSessionMode.DECK_PRACTICE) {
+            QuizTypeSelector(
+                selectedQuizType = uiState.quizType,
+                onQuizTypeSelected = onQuizTypeSelected
+            )
+        } else {
+            MessageCard(
+                title = "Ôn ngẫu nhiên",
+                message = "Mỗi thẻ tới hạn sẽ tự chọn trắc nghiệm hoặc điền từ. Nếu một dạng thiếu dữ liệu, app dùng dạng còn lại."
+            )
+        }
 
         if (uiState.sessionMode == PracticeSessionMode.SPACED_REPETITION) {
             SpacedRepetitionPlanCard(uiState = uiState)
@@ -249,7 +269,13 @@ private fun PracticeSetup(
             MessageCard(title = "Chưa thể bắt đầu", message = message)
         }
 
-        if (uiState.quizType == QuizType.FLASHCARD) {
+        if (uiState.sessionMode == PracticeSessionMode.SPACED_REPETITION) {
+            PrimaryButton(
+                text = "Bắt đầu ôn ngẫu nhiên (${uiState.sessionQuestionCount} câu)",
+                enabled = uiState.canStartSession,
+                onClick = onStartSession
+            )
+        } else if (uiState.quizType == QuizType.FLASHCARD) {
             PrimaryButton(
                 text = if (uiState.sessionMode == PracticeSessionMode.SPACED_REPETITION) {
                     "Ôn Flashcard (${uiState.sessionQuestionCount} từ)"
@@ -286,16 +312,20 @@ private fun ActivePracticeSession(
     onRetrySaveResult: () -> Unit,
     onContinueSession: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    val currentQuizType = uiState.currentQuestionQuizType
+    val context = LocalContext.current
+    val ttsHelper = remember { TextToSpeechHelper(context) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            ttsHelper.shutdown()
+        }
+    }
+
+    ScrollablePracticeColumn {
         CompactSessionProgress(uiState = uiState)
 
-        when (uiState.quizType) {
+        when (currentQuizType) {
             QuizType.FLASHCARD -> Unit
 
             QuizType.MULTIPLE_CHOICE -> {
@@ -324,14 +354,24 @@ private fun ActivePracticeSession(
         }
 
         uiState.feedback?.let { feedback ->
+            val answerCard = uiState.currentAnswerCard
             FeedbackCard(
                 feedback = feedback,
-                correctAnswer = when (uiState.quizType) {
+                correctAnswer = when (currentQuizType) {
                     QuizType.FLASHCARD -> ""
                     QuizType.MULTIPLE_CHOICE -> uiState.multipleChoiceQuestion?.correctAnswer.orEmpty()
                     QuizType.FILL_IN_THE_BLANK -> uiState.fillInBlankQuestion?.correctAnswer.orEmpty()
                 },
-                correctMeaning = uiState.fillInBlankQuestion?.meaning
+                answerCard = answerCard,
+                onSpeakAnswer = {
+                    answerCard?.let { card ->
+                        ttsHelper.speak(
+                            text = card.word,
+                            audioUrl = card.audioUrlUs.ifBlank { card.audioUrl },
+                            accent = PronunciationAccent.US
+                        )
+                    }
+                }
             )
             if (uiState.selectedReviewGrade == null) {
                 uiState.resultSaveErrorMessage?.let { message ->
@@ -965,9 +1005,19 @@ private fun QuestionCard(
 private fun FeedbackCard(
     feedback: AnswerFeedback,
     correctAnswer: String,
-    correctMeaning: String?
+    answerCard: Card?,
+    onSpeakAnswer: () -> Unit
 ) {
     val isCorrect = feedback == AnswerFeedback.CORRECT
+    val feedbackColor = if (isCorrect) CorrectColor else IncorrectColor
+    val compactAnswer = answerCard?.word
+        ?.takeIf { it.isNotBlank() }
+        ?: correctAnswer
+    val compactMeaning = answerCard?.meaning.orEmpty()
+    var isExpanded by remember(feedback, correctAnswer, answerCard?.id) {
+        mutableStateOf(false)
+    }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -975,20 +1025,224 @@ private fun FeedbackCard(
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = if (isCorrect) "Chính xác" else "Chưa chính xác",
-                color = if (isCorrect) CorrectColor else IncorrectColor,
-                fontWeight = FontWeight.Bold
-            )
-            if (!isCorrect) {
-                Text(text = "Đáp án đúng: $correctAnswer", color = IncorrectColor)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = if (isCorrect) "Chính xác" else "Chưa chính xác",
+                        color = feedbackColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (compactAnswer.isNotBlank()) {
+                        Text(
+                            text = "Đáp án: $compactAnswer",
+                            color = feedbackColor,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    if (!isExpanded && compactMeaning.isNotBlank()) {
+                        Text(
+                            text = "Nghĩa: $compactMeaning",
+                            color = feedbackColor,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (answerCard != null) {
+                        IconButton(onClick = onSpeakAnswer) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = "Speak answer",
+                                tint = feedbackColor
+                            )
+                        }
+                    }
+                    IconButton(onClick = { isExpanded = !isExpanded }) {
+                        Icon(
+                            imageVector = if (isExpanded) {
+                                Icons.Filled.KeyboardArrowUp
+                            } else {
+                                Icons.Filled.KeyboardArrowDown
+                            },
+                            contentDescription = if (isExpanded) {
+                                "Collapse answer details"
+                            } else {
+                                "Expand answer details"
+                            },
+                            tint = feedbackColor
+                        )
+                    }
+                }
             }
-            correctMeaning?.takeIf { it.isNotBlank() }?.let { meaning ->
-                Text(text = "Nghĩa: $meaning", color = if (isCorrect) CorrectColor else IncorrectColor)
+
+            if (isExpanded) {
+                ScrollableAnswerDetails(color = feedbackColor) {
+                    if (!isCorrect && correctAnswer.isNotBlank()) {
+                        FeedbackDetailRow(
+                            label = "Đáp án đúng",
+                            value = correctAnswer,
+                            color = feedbackColor,
+                            isEmphasized = true
+                        )
+                    }
+
+                    if (answerCard != null) {
+                        val card = answerCard
+                        FeedbackDetailRow(
+                            label = "Từ",
+                            value = card.word,
+                            color = feedbackColor,
+                            isEmphasized = true
+                        )
+                        FeedbackDetailRow(
+                            label = "Nghĩa",
+                            value = card.meaning,
+                            color = feedbackColor
+                        )
+                        FeedbackDetailRow(
+                            label = "Phát âm",
+                            value = card.pronunciation,
+                            color = feedbackColor
+                        )
+                        FeedbackDetailRow(
+                            label = "Ví dụ",
+                            value = card.example,
+                            color = feedbackColor
+                        )
+                    } else if (correctAnswer.isBlank()) {
+                        Text(
+                            text = "Chưa có thêm thông tin cho thẻ này.",
+                            color = feedbackColor,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun ScrollablePracticeColumn(
+    content: @Composable () -> Unit
+) {
+    val scrollState = rememberScrollState()
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(16.dp)
+                .padding(end = if (scrollState.maxValue > 0) 8.dp else 0.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            content()
+        }
+
+        PracticeScrollIndicator(
+            scrollState = scrollState,
+            availableHeight = maxHeight,
+            color = PrimaryBlue
+        )
+    }
+}
+
+@Composable
+private fun ScrollableAnswerDetails(
+    color: Color,
+    content: @Composable () -> Unit
+) {
+    val scrollState = rememberScrollState()
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 240.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 240.dp)
+                .verticalScroll(scrollState)
+                .padding(end = if (scrollState.maxValue > 0) 10.dp else 0.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            content()
+        }
+
+        PracticeScrollIndicator(
+            scrollState = scrollState,
+            availableHeight = maxHeight,
+            color = color
+        )
+    }
+}
+
+@Composable
+private fun BoxScope.PracticeScrollIndicator(
+    scrollState: ScrollState,
+    availableHeight: Dp,
+    color: Color
+) {
+    if (scrollState.maxValue <= 0) return
+
+    val thumbHeight = 48.dp
+    val scrollFraction = scrollState.value.toFloat() / scrollState.maxValue.toFloat()
+    val thumbTop = (availableHeight - thumbHeight) * scrollFraction
+
+    Box(
+        modifier = Modifier
+            .align(Alignment.CenterEnd)
+            .width(4.dp)
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(999.dp))
+            .background(LightBorder.copy(alpha = 0.85f))
+    )
+    Box(
+        modifier = Modifier
+            .align(Alignment.TopEnd)
+            .padding(top = thumbTop)
+            .width(4.dp)
+            .height(thumbHeight)
+            .clip(RoundedCornerShape(999.dp))
+            .background(color.copy(alpha = 0.75f))
+    )
+}
+
+@Composable
+private fun FeedbackDetailRow(
+    label: String,
+    value: String,
+    color: Color,
+    isEmphasized: Boolean = false
+) {
+    if (value.isBlank()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = label,
+            color = color,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = value,
+            color = color,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (isEmphasized) FontWeight.Bold else FontWeight.Normal
+        )
     }
 }
 

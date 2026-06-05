@@ -17,6 +17,8 @@ data class Card(
     val note: String = "",
     val imageUrl: String = "",
     val audioUrl: String = "",
+    val audioUrlUs: String = "",
+    val audioUrlUk: String = "",
     val tags: List<String> = emptyList(),
     val sm2EaseFactor: Double = 2.5,
     val sm2Repetitions: Int = 0,

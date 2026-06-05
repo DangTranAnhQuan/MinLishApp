@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
+import kotlin.random.Random
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -182,7 +183,7 @@ class PracticeViewModel @Inject constructor(
             _uiState.update { it.copy(setupMessage = "Bạn cần đăng nhập để bắt đầu luyện tập.") }
             return
         }
-        if (state.quizType == QuizType.FLASHCARD) {
+        if (state.sessionMode == PracticeSessionMode.DECK_PRACTICE && state.quizType == QuizType.FLASHCARD) {
             _uiState.update { it.copy(setupMessage = "Hãy dùng nút Flashcard để mở màn lật thẻ.") }
             return
         }
@@ -191,14 +192,8 @@ class PracticeViewModel @Inject constructor(
             return
         }
 
-        val queueCardIds = buildPracticeQueueUseCase(
-            cards = state.practiceCards,
-            distractorCards = distractorCardsFor(state),
-            quizType = state.quizType.toDomain(),
-            sessionMode = state.sessionMode,
-            currentTimeMs = System.currentTimeMillis()
-        )
-        if (queueCardIds.isEmpty()) {
+        val sessionPlan = buildSessionPlan(state)
+        if (sessionPlan.queueCardIds.isEmpty()) {
             _uiState.update { it.copy(setupMessage = unavailableMessage(state)) }
             return
         }
@@ -208,10 +203,13 @@ class PracticeViewModel @Inject constructor(
             it.copy(
                 phase = PracticePhase.IN_PROGRESS,
                 sessionId = UUID.randomUUID().toString(),
-                queueCardIds = queueCardIds,
+                queueCardIds = sessionPlan.queueCardIds,
+                questionQuizTypes = sessionPlan.questionQuizTypes,
                 currentQuestionIndex = 0,
                 correctAnswerCount = 0,
                 incorrectAnswerCount = 0,
+                multipleChoiceQuestion = null,
+                fillInBlankQuestion = null,
                 setupMessage = null
             ).clearedAnswer()
         }
@@ -298,7 +296,8 @@ class PracticeViewModel @Inject constructor(
             return
         }
 
-        val cardId = when (state.quizType) {
+        val currentQuizType = state.currentQuestionQuizType
+        val cardId = when (currentQuizType) {
             QuizType.FLASHCARD -> null
             QuizType.MULTIPLE_CHOICE -> state.multipleChoiceQuestion?.cardId
             QuizType.FILL_IN_THE_BLANK -> state.fillInBlankQuestion?.cardId
@@ -307,7 +306,7 @@ class PracticeViewModel @Inject constructor(
 
         if (state.isOfficialReview) {
             _uiState.update { it.copy(selectedReviewGrade = effectiveGrade) }
-            savePracticeAttempt(cardId, state.feedback, effectiveGrade)
+            savePracticeAttempt(cardId, state.feedback, effectiveGrade, currentQuizType)
         } else {
             pendingSubmission = null
             _uiState.update {
@@ -338,6 +337,7 @@ class PracticeViewModel @Inject constructor(
                     phase = PracticePhase.SETUP,
                     sessionId = "",
                     queueCardIds = emptyList(),
+                    questionQuizTypes = emptyMap(),
                     currentQuestionIndex = 0,
                     correctAnswerCount = 0,
                     incorrectAnswerCount = 0,
@@ -370,9 +370,10 @@ class PracticeViewModel @Inject constructor(
         val state = _uiState.value
         val cardId = state.queueCardIds.getOrNull(state.currentQuestionIndex) ?: return
         val card = state.practiceCards.firstOrNull { it.id == cardId } ?: return
+        val currentQuizType = state.currentQuestionQuizType
 
         _uiState.update {
-            when (it.quizType) {
+            when (currentQuizType) {
                 QuizType.FLASHCARD -> it
 
                 QuizType.MULTIPLE_CHOICE -> it.copy(
@@ -394,7 +395,8 @@ class PracticeViewModel @Inject constructor(
     private fun savePracticeAttempt(
         cardId: String,
         feedback: AnswerFeedback,
-        grade: ReviewGrade
+        grade: ReviewGrade,
+        quizType: QuizType
     ) {
         val state = _uiState.value
         if (state.userId.isBlank() || state.sessionId.isBlank()) {
@@ -434,7 +436,7 @@ class PracticeViewModel @Inject constructor(
             userId = state.userId,
             deckId = currentCard.deckId,
             cardId = cardId,
-            quizType = state.quizType.toDomain(),
+            quizType = quizType.toDomain(),
             sessionMode = state.sessionMode,
             isCorrect = isCorrect,
             qualityScore = reviewResult.grade.qualityScore,
@@ -513,6 +515,73 @@ class PracticeViewModel @Inject constructor(
         }
     }
 
+    private fun buildSessionPlan(state: PracticeUiState): PracticeSessionPlan {
+        return when (state.sessionMode) {
+            PracticeSessionMode.SPACED_REPETITION -> buildMixedSpacedRepetitionPlan(state)
+            PracticeSessionMode.DECK_PRACTICE -> PracticeSessionPlan(
+                queueCardIds = buildPracticeQueueUseCase(
+                    cards = state.practiceCards,
+                    distractorCards = distractorCardsFor(state),
+                    quizType = state.quizType.toDomain(),
+                    sessionMode = state.sessionMode,
+                    currentTimeMs = System.currentTimeMillis()
+                ),
+                questionQuizTypes = emptyMap()
+            )
+        }
+    }
+
+    private fun buildMixedSpacedRepetitionPlan(
+        state: PracticeUiState,
+        currentTimeMs: Long = System.currentTimeMillis(),
+        random: Random = Random.Default
+    ): PracticeSessionPlan {
+        val plannedQuestions = mixedSpacedRepetitionCandidates(state, currentTimeMs)
+            .map { candidate ->
+                PlannedPracticeQuestion(
+                    cardId = candidate.card.id,
+                    quizType = candidate.availableQuizTypes.random(random)
+                )
+            }
+            .shuffled(random)
+
+        return PracticeSessionPlan(
+            queueCardIds = plannedQuestions.map { it.cardId },
+            questionQuizTypes = plannedQuestions.associate { it.cardId to it.quizType }
+        )
+    }
+
+    private fun mixedSpacedRepetitionCandidates(
+        state: PracticeUiState,
+        currentTimeMs: Long
+    ): List<MixedPracticeCandidate> {
+        val distractorCards = distractorCardsFor(state)
+        val multipleChoiceCardIds = generateQuizUseCase
+            .eligibleMultipleChoiceCards(state.practiceCards, distractorCards)
+            .map(Card::id)
+            .toSet()
+        val fillInBlankCardIds = generateQuizUseCase
+            .eligibleFillInBlankCards(state.practiceCards)
+            .map(Card::id)
+            .toSet()
+
+        return state.practiceCards
+            .filter { it.sm2Interval > 0 && it.nextReviewTime.time <= currentTimeMs }
+            .distinctBy { it.id }
+            .sortedBy { it.nextReviewTime.time }
+            .distinctBy { it.word.trim().lowercase() }
+            .mapNotNull { card ->
+                val availableQuizTypes = mutableListOf<QuizType>()
+                if (card.id in multipleChoiceCardIds) availableQuizTypes.add(QuizType.MULTIPLE_CHOICE)
+                if (card.id in fillInBlankCardIds) availableQuizTypes.add(QuizType.FILL_IN_THE_BLANK)
+                if (availableQuizTypes.isEmpty()) {
+                    null
+                } else {
+                    MixedPracticeCandidate(card = card, availableQuizTypes = availableQuizTypes)
+                }
+            }
+    }
+
     private fun refreshSetupDetails(state: PracticeUiState): PracticeUiState {
         val learnedCards = state.userCards.filter { it.sm2Interval > 0 }
         val practiceCards = when (state.sessionMode) {
@@ -521,33 +590,56 @@ class PracticeViewModel @Inject constructor(
                 state.userCards.filter { it.deckId == state.selectedDeckId }
             }
         }
-        val distractorCards = distractorCardsFor(state.copy(practiceCards = practiceCards))
-        val eligibleCards = when (state.quizType) {
-            QuizType.FLASHCARD -> practiceCards.filter { it.word.isNotBlank() }
-
-            QuizType.MULTIPLE_CHOICE -> {
-                generateQuizUseCase.eligibleMultipleChoiceCards(practiceCards, distractorCards)
-            }
-
-            QuizType.FILL_IN_THE_BLANK -> {
-                generateQuizUseCase.eligibleFillInBlankCards(practiceCards)
-            }
-        }
-            .distinctBy { it.id }
-            .sortedBy { it.nextReviewTime.time }
-            .distinctBy { it.word.trim().lowercase() }
         val now = System.currentTimeMillis()
+        val setupState = state.copy(practiceCards = practiceCards)
+        val distractorCards = distractorCardsFor(setupState)
+        val mixedSm2QuestionCount = if (state.sessionMode == PracticeSessionMode.SPACED_REPETITION) {
+            mixedSpacedRepetitionCandidates(setupState, now).size
+        } else {
+            0
+        }
+        val eligibleCards = if (state.sessionMode == PracticeSessionMode.SPACED_REPETITION) {
+            emptyList()
+        } else {
+            when (state.quizType) {
+                QuizType.FLASHCARD -> practiceCards.filter { it.word.isNotBlank() }
 
-        return state.copy(
-            practiceCards = practiceCards,
-            availableQuestionCount = eligibleCards.size,
-            sessionQuestionCount = buildPracticeQueueUseCase(
+                QuizType.MULTIPLE_CHOICE -> {
+                    generateQuizUseCase.eligibleMultipleChoiceCards(practiceCards, distractorCards)
+                }
+
+                QuizType.FILL_IN_THE_BLANK -> {
+                    generateQuizUseCase.eligibleFillInBlankCards(practiceCards)
+                }
+            }
+                .distinctBy { it.id }
+                .sortedBy { it.nextReviewTime.time }
+                .distinctBy { it.word.trim().lowercase() }
+        }
+        val deckPracticeQuestionCount = if (state.sessionMode == PracticeSessionMode.DECK_PRACTICE) {
+            buildPracticeQueueUseCase(
                 cards = practiceCards,
                 distractorCards = distractorCards,
                 quizType = state.quizType.toDomain(),
                 sessionMode = state.sessionMode,
                 currentTimeMs = now
-            ).size,
+            ).size
+        } else {
+            0
+        }
+
+        return state.copy(
+            practiceCards = practiceCards,
+            availableQuestionCount = if (state.sessionMode == PracticeSessionMode.SPACED_REPETITION) {
+                mixedSm2QuestionCount
+            } else {
+                eligibleCards.size
+            },
+            sessionQuestionCount = if (state.sessionMode == PracticeSessionMode.SPACED_REPETITION) {
+                mixedSm2QuestionCount
+            } else {
+                deckPracticeQuestionCount
+            },
             newWordsCount = practiceCards.count { it.sm2Interval == 0 },
             reviewSchedule = getReviewScheduleUseCase(learnedCards, now),
             reviewForecast = getReviewForecastUseCase(learnedCards, now)
@@ -568,6 +660,10 @@ class PracticeViewModel @Inject constructor(
     }
 
     private fun unavailableMessage(state: PracticeUiState): String {
+        if (state.sessionMode == PracticeSessionMode.SPACED_REPETITION) {
+            return "Không có từ đã học đến hạn đủ dữ liệu cho trắc nghiệm hoặc điền từ. Trắc nghiệm cần ít nhất 4 nghĩa khác nhau; điền từ cần example chứa từ khóa."
+        }
+
         val scopeMessage = when (state.sessionMode) {
             PracticeSessionMode.SPACED_REPETITION -> "Không có từ đã học đến hạn"
             PracticeSessionMode.DECK_PRACTICE -> "Không có từ hợp lệ trong bộ từ đã chọn"
@@ -635,6 +731,21 @@ private data class PendingPracticeSubmission(
     val reviewedCard: Card
 )
 
+private data class PracticeSessionPlan(
+    val queueCardIds: List<String>,
+    val questionQuizTypes: Map<String, QuizType>
+)
+
+private data class PlannedPracticeQuestion(
+    val cardId: String,
+    val quizType: QuizType
+)
+
+private data class MixedPracticeCandidate(
+    val card: Card,
+    val availableQuizTypes: List<QuizType>
+)
+
 enum class PracticePhase {
     SETUP,
     IN_PROGRESS,
@@ -677,6 +788,7 @@ data class PracticeUiState(
     val phase: PracticePhase = PracticePhase.SETUP,
     val sessionId: String = "",
     val queueCardIds: List<String> = emptyList(),
+    val questionQuizTypes: Map<String, QuizType> = emptyMap(),
     val currentQuestionIndex: Int = 0,
     val availableQuestionCount: Int = 0,
     val sessionQuestionCount: Int = 0,
@@ -733,6 +845,22 @@ data class PracticeUiState(
 
     val isLastQuestion: Boolean
         get() = totalQuestionCount > 0 && currentQuestionIndex == totalQuestionCount - 1
+
+    val currentQuestionQuizType: QuizType
+        get() {
+            val cardId = queueCardIds.getOrNull(currentQuestionIndex)
+            return cardId?.let { questionQuizTypes[it] } ?: quizType
+        }
+
+    val currentAnswerCard: Card?
+        get() {
+            val cardId = when (currentQuestionQuizType) {
+                QuizType.FLASHCARD -> queueCardIds.getOrNull(currentQuestionIndex)
+                QuizType.MULTIPLE_CHOICE -> multipleChoiceQuestion?.cardId
+                QuizType.FILL_IN_THE_BLANK -> fillInBlankQuestion?.cardId
+            }
+            return cardId?.let { id -> practiceCards.firstOrNull { it.id == id } }
+        }
 
     val hasUnsavedResult: Boolean
         get() = feedback != null && !isResultSaved

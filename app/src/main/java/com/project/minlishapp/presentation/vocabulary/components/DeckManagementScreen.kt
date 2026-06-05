@@ -52,7 +52,7 @@ fun DeckManagementScreen(
     onImportExportClick: () -> Unit,
     onDeckClick: (String) -> Unit,
     onAddCardClick: (String) -> Unit,
-    onLearnDeckClick: (String) -> Unit,
+    onLearnDeckClick: (String, Boolean) -> Unit,
     viewModel: VocabularyViewModel = hiltViewModel(),
     modifier: Modifier = Modifier
 ) {
@@ -114,7 +114,7 @@ fun DeckManagementScreen(
     }
 
     val csvPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
             selectedDeckIdForImport?.let { deckId ->
@@ -123,16 +123,22 @@ fun DeckManagementScreen(
         }
     }
 
-    if (uiState.isImporting) {
+    if (uiState.isImporting || uiState.isExporting) {
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("Importing Cards") },
+            title = {
+                Text(if (uiState.isImporting) "Importing cards" else "Exporting cards")
+            },
             text = {
                 Column {
-                    LinearProgressIndicator(
-                        progress = uiState.importProgress,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    if (uiState.isImporting) {
+                        LinearProgressIndicator(
+                            progress = uiState.importProgress,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(uiState.importStatus)
                 }
@@ -193,7 +199,42 @@ fun DeckManagementScreen(
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodyMedium
                             )
-                            TextButton(onClick = { viewModel.onSearchQueryChange(uiState.searchQuery) /* hack to clear msg */ }) {
+                            TextButton(onClick = viewModel::clearImportExportStatus) {
+                                Text("OK")
+                            }
+                        }
+                    }
+                }
+
+                if (
+                    !uiState.isImporting &&
+                    !uiState.isExporting &&
+                    uiState.importStatus.isNotBlank()
+                ) {
+                    val isSuccess = uiState.importStatus.contains("completed", ignoreCase = true)
+                    androidx.compose.material3.Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSuccess) {
+                                Color(0xffecfdf5)
+                            } else {
+                                MaterialTheme.colorScheme.errorContainer
+                            }
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = uiState.importStatus,
+                                color = if (isSuccess) Color(0xff047857) else MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            TextButton(onClick = viewModel::clearImportExportStatus) {
                                 Text("OK")
                             }
                         }
@@ -236,12 +277,20 @@ fun DeckManagementScreen(
                             DeckItem(
                                 deck = deck,
                                 onClick = { onDeckClick(deck.id) },
-                                onLearn = { onLearnDeckClick(deck.id) },
+                                onLearnOfficial = { onLearnDeckClick(deck.id, true) },
+                                onLearnFree = { onLearnDeckClick(deck.id, false) },
                                 onDelete = { viewModel.deleteDeck(deck.id) },
                                 onEdit = { editingDeck = deck },
                                 onImport = {
                                     selectedDeckIdForImport = deck.id
-                                    csvPickerLauncher.launch("text/*")
+                                    csvPickerLauncher.launch(
+                                        arrayOf(
+                                            "text/csv",
+                                            "text/comma-separated-values",
+                                            "text/*",
+                                            "application/vnd.ms-excel"
+                                        )
+                                    )
                                 },
                                 onExport = {
                                     viewModel.exportDeck(context, deck.id, deck.title)
@@ -280,7 +329,8 @@ fun DeckManagementScreen(
 fun DeckItem(
     deck: Deck, 
     onClick: () -> Unit, 
-    onLearn: () -> Unit,
+    onLearnOfficial: () -> Unit,
+    onLearnFree: () -> Unit,
     onDelete: () -> Unit,
     onEdit: () -> Unit,
     onImport: () -> Unit,
@@ -348,8 +398,12 @@ fun DeckItem(
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                     DropdownMenuItem(
-                        text = { Text("Learn Flashcard") },
-                        onClick = { onLearn(); showMenu = false }
+                        text = { Text("Flashcard chính thức") },
+                        onClick = { onLearnOfficial(); showMenu = false }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Flashcard tự do") },
+                        onClick = { onLearnFree(); showMenu = false }
                     )
                     DropdownMenuItem(
                         text = { Text("Edit Deck") },
@@ -460,5 +514,5 @@ fun NavItem(label: String, icon: String, selected: Boolean) {
 @Preview(widthDp = 375, heightDp = 840)
 @Composable
 private fun DeckManagementScreenPreview() {
-    DeckManagementScreen({}, {}, {}, {})
+    DeckManagementScreen({}, {}, {}, { _, _ -> })
  }
